@@ -10,7 +10,7 @@
 mod x11_impl {
     use std::time::Instant;
 
-    use tracing::{debug, trace, warn};
+    use tracing::{debug, trace};
     use x11rb::connection::Connection;
     use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, Window};
     use x11rb::rust_connection::RustConnection;
@@ -46,10 +46,23 @@ mod x11_impl {
             let started = Instant::now();
             let screen_size = self.screen_size();
 
-            let (raw_x, raw_y) = self
-                .focused_window_bottom(indicator_w, indicator_h)
-                .or_else(|| self.cursor_above(indicator_w, indicator_h))
-                .or_else(|| self.screen_center_bottom(indicator_w, indicator_h, screen_size))?;
+            // On Wayland the X11 active-window + cursor queries go through
+            // XWayland and return stale/incorrect coords (no real "active
+            // window" for Wayland-native apps, and the cursor pointer may
+            // be locked into XWayland's own root). Skip those probes and
+            // anchor at screen-bottom-center directly.
+            let on_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+                || std::env::var("XDG_SESSION_TYPE")
+                    .map(|v| v.eq_ignore_ascii_case("wayland"))
+                    .unwrap_or(false);
+
+            let (raw_x, raw_y) = if on_wayland {
+                self.screen_center_bottom(indicator_w, indicator_h, screen_size)?
+            } else {
+                self.focused_window_bottom(indicator_w, indicator_h)
+                    .or_else(|| self.cursor_above(indicator_w, indicator_h))
+                    .or_else(|| self.screen_center_bottom(indicator_w, indicator_h, screen_size))?
+            };
 
             let pos = clamp_to_screen(raw_x, raw_y, indicator_w, indicator_h, screen_size);
 
@@ -137,7 +150,7 @@ mod x11_impl {
             let (sw, sh) = screen?;
             let x = (sw - indicator_w) / 2;
             let y = sh - indicator_h - ABOVE_SCREEN_BOTTOM;
-            warn!("indicator anchored at screen-bottom-center fallback ({x},{y})");
+            debug!("indicator anchored at screen-bottom-center ({x},{y})");
             Some((x, y))
         }
     }

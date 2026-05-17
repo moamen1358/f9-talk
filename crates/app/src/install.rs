@@ -154,6 +154,16 @@ fn install_system() -> Result<()> {
         .args(["trigger", "--type=devices", "--action=add", "--subsystem-match=misc", "--sysname-match=uinput"])
         .status();
     println!("  ✓ reloaded udev rules");
+
+    // Belt-and-suspenders: directly fix /dev/uinput perms for the
+    // current boot so the user doesn't need to reboot or replug
+    // anything for f9-talk to start working. The udev rule handles
+    // every subsequent boot.
+    if Path::new("/dev/uinput").exists() {
+        let _ = Command::new("chgrp").args(["input", "/dev/uinput"]).status();
+        let _ = Command::new("chmod").args(["0660", "/dev/uinput"]).status();
+        println!("  ✓ /dev/uinput is now group=input mode=0660");
+    }
     Ok(())
 }
 
@@ -287,5 +297,8 @@ const UDEV_RULE: &str = "# Allow members of the `input` group to write to /dev/u
 # After install, run:
 #   sudo udevadm control --reload-rules && sudo udevadm trigger
 # (or reboot) for the rule to take effect.
-KERNEL==\"uinput\", MODE==\"0660\", GROUP=\"input\"
+#
+# Note: `==` is the match operator, `=` is assign. MODE/GROUP MUST use
+# single `=` or the rule silently no-ops and /dev/uinput stays root:root.
+KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"input\"
 ";

@@ -42,8 +42,14 @@ impl IndicatorState {
 
 /// Indicator window dimensions. Width chosen so the wave's ~320 px
 /// pill leaves ≥20 px of soft-glow margin on each side.
-pub const INDICATOR_W: i32 = 360;
-pub const INDICATOR_H: i32 = 80;
+// Slim "indicator bar" form factor. On XWayland under Wayland
+// compositors (COSMIC) RGBA transparency isn't honored, so the
+// window rectangle always renders as an opaque box. By making the
+// window very thin we trade the "transparent wave" look for a clean
+// slim bar that still shows the wave — visually intentional instead
+// of looking like broken transparency.
+pub const INDICATOR_W: i32 = 320;
+pub const INDICATOR_H: i32 = 22;
 
 /// eframe app: owns the smoothed audio level (asymmetric EMA), the
 /// animation clock, the X11 positioner, and the paint loop.
@@ -101,10 +107,14 @@ impl IndicatorApp {
     }
 
     fn maybe_reposition(&mut self, ctx: &egui::Context, recording: bool) {
-        // Rising edge of `recording`: query X11 for the focused-window
-        // position and remember it. The actual `OuterPosition` is then
-        // resent for ~5 frames so cross-monitor moves stick on WMs that
-        // ignore the first request.
+        // Rising edge of `recording`: compute the desired position and
+        // re-assert it for a few frames so X11 / mutter / KDE WMs that
+        // ignore the very first request pick it up. On COSMIC (Wayland)
+        // the compositor pins XWayland windows to its own placement
+        // policy regardless of client requests — see the
+        // troubleshooting section of README. Nothing to do about that
+        // here; the user sees the indicator wherever cosmic-comp puts
+        // it (typically top-center).
         if recording && !self.last_recording {
             if let Some(positioner) = self.positioner.as_ref() {
                 if let Some((x, y)) = positioner.compute_position(INDICATOR_W, INDICATOR_H) {
@@ -115,8 +125,6 @@ impl IndicatorApp {
         }
         self.last_recording = recording;
 
-        // Re-assert the OuterPosition on consecutive frames so the WM
-        // can't ignore the very first request.
         if self.reposition_frames_left > 0 {
             if let Some(pos) = self.pending_position {
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
@@ -140,11 +148,13 @@ impl eframe::App for IndicatorApp {
 
         self.maybe_reposition(ctx, recording);
 
-        // Hide the entire window when there's nothing to show. This
-        // matches the Python build's `hide_recording.emit()` behaviour
-        // and avoids any compositor-drawn window outline lingering on
-        // screen between presses.
-        let want_visible = recording || status.is_some();
+        // Visibility tracks ONLY the recording state, not status_text.
+        // On Wayland (COSMIC), every map/unmap shifts keyboard focus —
+        // so we keep the window mapped strictly while F9 is held and
+        // unmap the instant it's released. Transcribing/translating/
+        // typing all happen with the indicator hidden so the typer's
+        // uinput keys land on the user's previous focus.
+        let want_visible = recording;
         if want_visible != self.last_visible {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(want_visible));
             self.last_visible = want_visible;
@@ -215,6 +225,10 @@ fn build_wave_path(
     let n: usize = 56;
     let t_anim = anim_t + time_offset;
     let level_scale = 0.08 + (audio_level_smoothed * 13.0).min(1.85);
+    // Cap amplitude to ~40% of half-height so the wave never clips at
+    // the window's top/bottom edge. The slim 22px indicator gives us
+    // ~9px above and below cy; 40% of 9 ≈ 3.5px peak deviation.
+    let max_amp = (rect.height() * 0.4).min(14.0);
 
     let mut pts = Vec::with_capacity(n);
     for i in 0..n {
@@ -226,7 +240,7 @@ fn build_wave_path(
             + 0.30 * (t * 2.1 + 1.4).sin()
             + 0.18 * (t * 0.6 + 3.0).sin()
             + 0.10 * (t * 3.7 + 2.0).sin();
-        let y = cy + 14.0 * amp_mult * envelope * wave * level_scale;
+        let y = cy + max_amp * amp_mult * envelope * wave * level_scale;
         pts.push(egui::pos2(x, y));
     }
     pts

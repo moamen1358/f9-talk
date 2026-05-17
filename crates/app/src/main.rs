@@ -197,15 +197,29 @@ fn main() -> anyhow::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("f9-talk")
         .with_app_id("f9-talk")
-        .with_inner_size([360.0, 80.0])
+        .with_inner_size([320.0, 22.0])
         .with_decorations(false)
         .with_transparent(true)
         .with_always_on_top()
         .with_resizable(false)
         .with_taskbar(false)
-        .with_mouse_passthrough(true);
+        .with_mouse_passthrough(true)
+        // with_active(false): don't steal keyboard focus when the
+        // indicator becomes visible. Wayland (COSMIC) ignores this
+        // hint and focuses anyway, which is why the typer hides the
+        // indicator on F9 release before synthesizing keys — see
+        // crates/app/src/main.rs HotkeyEvent::Released handler.
+        .with_active(false);
     #[cfg(target_os = "linux")]
     {
+        // X11WindowType::Notification → on Mutter/KWin the WM keeps
+        // the window out of the taskbar/alt-tab list and treats it
+        // as an override-redirect-style overlay. On COSMIC, all
+        // XWayland window types (Normal, Utility, Notification) get
+        // auto-pinned to cosmic-comp's chosen placement regardless
+        // of client position requests — see the COSMIC positioning
+        // note in docs/architecture.md. Notification is the most
+        // semantically correct for our use case.
         viewport = viewport.with_window_type(egui::X11WindowType::Notification);
     }
     // Start hidden — IndicatorApp toggles visibility on the
@@ -215,7 +229,7 @@ fn main() -> anyhow::Result<()> {
     // Pre-compute initial position so the first frame doesn't flash at
     // the eframe default before maybe_reposition runs on the first press.
     if let Ok(pos) = f9_talk_ui::Positioner::new() {
-        if let Some((x, y)) = pos.compute_position(360, 80) {
+        if let Some((x, y)) = pos.compute_position(f9_talk_ui::INDICATOR_W, f9_talk_ui::INDICATOR_H) {
             viewport = viewport.with_position([x as f32, y as f32]);
         }
     }
@@ -498,8 +512,19 @@ async fn run_session_loop(
                     Some(HotkeyEvent::Released) => {
                         let Some(sess) = session.take() else { continue; };
                         let release_at = Instant::now();
+                        // Hide the indicator FIRST so its Wayland/XWayland
+                        // window unmaps and the compositor returns
+                        // keyboard focus to the user's previous app.
+                        // Without this, the uinput keypresses synthesized
+                        // by the typer land on the indicator window
+                        // (which has no text field). Skip the
+                        // 'Transcribing…/Translating…/Typing…' status
+                        // strings — they'd keep the window visible.
                         indicator.set_recording(false);
-                        indicator.set_status_text(Some("✏  Transcribing…".to_string()));
+                        indicator.set_status_text(None);
+                        // Give the compositor a beat to settle focus
+                        // before the heavy work starts.
+                        std::thread::sleep(Duration::from_millis(100));
                         let result = backend.end_session(Duration::from_millis(350)).await;
                         let final_at = Instant::now();
                         info!(
@@ -513,22 +538,18 @@ async fn run_session_loop(
                         );
                         if result.transcript.is_empty() {
                             info!("(no speech detected)");
-                            indicator.set_status_text(None);
                         } else {
                             let final_text = if let Some(tr) = translator.as_ref() {
-                                indicator.set_status_text(Some("🌐  Translating…".to_string()));
                                 tr.translate(&result.transcript).await
                             } else {
                                 result.transcript.clone()
                             };
-                            indicator.set_status_text(Some("⌨  Typing…".to_string()));
                             if let Err(e) = typer.type_text(&final_text) {
                                 warn!("typer failed: {e}");
                                 if let Some(t) = tray_handle.as_ref() { t.set_error(true); }
                             } else if let Some(t) = tray_handle.as_ref() {
                                 t.set_error(false);
                             }
-                            indicator.set_status_text(None);
                         }
                     }
                     None => {

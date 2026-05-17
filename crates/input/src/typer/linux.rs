@@ -61,12 +61,34 @@ impl Typer {
 
         sleep(Duration::from_millis(120));
 
-        let has_xdotool = which("xdotool");
-        let clipboard = match arboard::Clipboard::new() {
-            Ok(c) => Some(c),
-            Err(e) => {
-                warn!("could not open clipboard ({e})");
-                None
+        // xdotool only works on X11. On Wayland it returns exit 0 but
+        // types into XWayland's void — Wayland-native apps see nothing.
+        // Detect via XDG_SESSION_TYPE / WAYLAND_DISPLAY and skip it so
+        // the clipboard+Ctrl+V (uinput-injected) path takes over.
+        let on_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var("XDG_SESSION_TYPE")
+                .map(|v| v.eq_ignore_ascii_case("wayland"))
+                .unwrap_or(false);
+        let has_xdotool = which("xdotool") && !on_wayland;
+        if on_wayland && which("xdotool") {
+            info!("Wayland session detected — skipping xdotool primary path (it silently no-ops on Wayland-native windows)");
+        }
+        // On Wayland the clipboard path needs `wl-clipboard` to publish
+        // text to the compositor. Without it, arboard's in-process
+        // clipboard means Ctrl+V pastes nothing. Bypass it: scancode
+        // synthesis via uinput works on every Wayland app and doesn't
+        // hijack the user's clipboard between dictations.
+        let has_wl_clipboard = which("wl-copy");
+        let clipboard = if on_wayland && !has_wl_clipboard {
+            info!("Wayland without wl-clipboard — skipping clipboard+Ctrl+V path; using direct uinput scancode typing");
+            None
+        } else {
+            match arboard::Clipboard::new() {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    warn!("could not open clipboard ({e})");
+                    None
+                }
             }
         };
 
@@ -199,15 +221,44 @@ fn which(cmd: &str) -> bool {
 }
 
 fn ascii_char_to_key(c: char) -> Option<(KeyCode, bool)> {
+    // Linux scancodes for letters follow the physical QWERTY layout, not
+    // the alphabet — so e.g. KEY_B=48 and KEY_E=18, not KEY_A+1 / KEY_A+4.
+    // Map each letter explicitly. Anything assuming alphabetic ordering
+    // produces garbage like 'h' → KEY_GRAVE.
+    fn letter_key(lower: char) -> KeyCode {
+        match lower {
+            'a' => KeyCode::KEY_A,
+            'b' => KeyCode::KEY_B,
+            'c' => KeyCode::KEY_C,
+            'd' => KeyCode::KEY_D,
+            'e' => KeyCode::KEY_E,
+            'f' => KeyCode::KEY_F,
+            'g' => KeyCode::KEY_G,
+            'h' => KeyCode::KEY_H,
+            'i' => KeyCode::KEY_I,
+            'j' => KeyCode::KEY_J,
+            'k' => KeyCode::KEY_K,
+            'l' => KeyCode::KEY_L,
+            'm' => KeyCode::KEY_M,
+            'n' => KeyCode::KEY_N,
+            'o' => KeyCode::KEY_O,
+            'p' => KeyCode::KEY_P,
+            'q' => KeyCode::KEY_Q,
+            'r' => KeyCode::KEY_R,
+            's' => KeyCode::KEY_S,
+            't' => KeyCode::KEY_T,
+            'u' => KeyCode::KEY_U,
+            'v' => KeyCode::KEY_V,
+            'w' => KeyCode::KEY_W,
+            'x' => KeyCode::KEY_X,
+            'y' => KeyCode::KEY_Y,
+            'z' => KeyCode::KEY_Z,
+            _ => unreachable!("letter_key called with non-lowercase-letter '{lower}'"),
+        }
+    }
     match c {
-        'a'..='z' => Some((
-            KeyCode(KeyCode::KEY_A.code() + (c as u16 - b'a' as u16)),
-            false,
-        )),
-        'A'..='Z' => Some((
-            KeyCode(KeyCode::KEY_A.code() + (c.to_ascii_lowercase() as u16 - b'a' as u16)),
-            true,
-        )),
+        'a'..='z' => Some((letter_key(c), false)),
+        'A'..='Z' => Some((letter_key(c.to_ascii_lowercase()), true)),
         '0' => Some((KeyCode::KEY_0, false)),
         '1'..='9' => Some((
             KeyCode(KeyCode::KEY_1.code() + (c as u16 - b'1' as u16)),

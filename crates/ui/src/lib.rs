@@ -9,7 +9,7 @@ pub mod keys_dialog;
 pub mod positioning;
 pub mod tray;
 
-pub use indicator::{IndicatorApp, IndicatorState};
+pub use indicator::{IndicatorApp, IndicatorState, INDICATOR_H, INDICATOR_W};
 pub use keys_dialog::{KeysDialogState, KeysSaved};
 pub use positioning::Positioner;
 pub use tray::{TrayCommand, TrayHandle, VisualState as TrayVisualState};

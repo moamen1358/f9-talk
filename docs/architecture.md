@@ -104,7 +104,9 @@ sudo dpkg -i target/debian/f9-talk_*.deb
 | Symptom | Resolution |
 |---|---|
 | `/dev/uinput is not writable` | The `.deb` adds the user to the `input` group, but the GUI session must restart for it to take effect. Log out and back in once. |
-| Tray icon invisible on vanilla GNOME | `sudo apt install gnome-shell-extension-appindicator`. Pop!_OS, Ubuntu, KDE, and COSMIC have native support. |
+| Tray icon invisible on vanilla GNOME | `sudo apt install gnome-shell-extension-appindicator`. Pop!_OS (on GNOME), Ubuntu, and KDE ship native support. |
+| Tray icon invisible on Pop!_OS COSMIC | COSMIC does not yet ship a StatusNotifierItem applet, so the tray menu has nowhere to render. Configure the Deepgram key directly in `~/.config/F9_talk/secrets.env`; everything else works without the tray. Track [pop-os/cosmic-applets](https://github.com/pop-os/cosmic-applets) for native support. |
+| Indicator appears top-center on COSMIC (not bottom) | `cosmic-comp` auto-pins every XWayland window to its chosen placement and silently rejects client position requests (verified with a 67-call `xdotool windowmove` burst that had zero effect). The proper fix is a Wayland-native `wlr-layer-shell` surface; until then the indicator lives wherever cosmic-comp puts it. Typing is unaffected. |
 | `no speech detected` | Hold F9 for at least 0.3 s before releasing. |
 | Wrong characters under non-en-US layout | Verify `xdotool` is installed; the typer logs `primary=xdotool` at startup. |
 | "Already running" with no visible window | `pkill -f /usr/bin/f9-talk` and relaunch. |
