@@ -16,6 +16,8 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use f9_talk_input::{typer_preflight, HotkeyEvent, Typer};
+
+mod install;
 use f9_talk_stt::{BackendEvent, Stt};
 use f9_talk_translate::Translator;
 use f9_talk_ui::{
@@ -29,6 +31,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 #[derive(Parser, Debug, Clone)]
 #[command(name = "f9-talk", version, about = "Hold-to-talk dictation")]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Subcommand>,
+
     #[arg(long, value_enum, default_value_t = Backend::Cloud)]
     backend: Backend,
 
@@ -53,6 +58,14 @@ struct Cli {
     verbose: bool,
 }
 
+#[derive(clap::Subcommand, Debug, Clone)]
+enum Subcommand {
+    /// Set up desktop integration: apps menu entry, autostart, udev rule, secrets stub.
+    Install(install::InstallArgs),
+    /// Remove what `install` set up (keeps your secrets.env in place).
+    Uninstall(install::InstallArgs),
+}
+
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 enum Backend {
     Cloud,
@@ -67,6 +80,14 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     if cli.verbose {
         debug!("CLI: {cli:?}");
+    }
+
+    // Subcommands (install / uninstall) run before any of the
+    // dictation runtime is set up — they're pure filesystem work.
+    match cli.command.as_ref() {
+        Some(Subcommand::Install(args)) => return install::run(args),
+        Some(Subcommand::Uninstall(args)) => return install::uninstall(args),
+        None => {}
     }
 
     let _lock = match acquire_instance_lock() {

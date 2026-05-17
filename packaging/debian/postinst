@@ -27,7 +27,32 @@ if [[ -n "$TARGET_USER" ]] && ! id -nG "$TARGET_USER" | grep -qw input; then
     echo "  ➜  log out and back in once for the new group + udev rule to take effect."
 fi
 
-# 4. If upgrading from Python f9-talk (≤0.3.x), the dpkg replaces logic
+# 4. Seed ~/.config/F9_talk/secrets.env for the installing user if it
+#    doesn't exist yet. The file is the only place the Deepgram key
+#    can live for the cloud backend, so a placeholder here saves new
+#    users a trip to the README. chmod 600 + chown back to the user.
+if [[ -n "$TARGET_USER" ]]; then
+    TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+    if [[ -n "$TARGET_HOME" && -d "$TARGET_HOME" ]]; then
+        SECRETS_DIR="$TARGET_HOME/.config/F9_talk"
+        SECRETS_FILE="$SECRETS_DIR/secrets.env"
+        if [[ ! -e "$SECRETS_FILE" ]]; then
+            install -d -m 700 -o "$TARGET_USER" -g "$TARGET_USER" "$SECRETS_DIR" || true
+            cat >"$SECRETS_FILE" <<'EOF'
+# f9-talk secrets — loaded at startup.
+# Get a key at https://console.deepgram.com/  (free tier available).
+# Paste the value, save, then run `f9-talk` (or log in if autostart is enabled).
+
+DEEPGRAM_API_KEY=PASTE_YOUR_DEEPGRAM_KEY_HERE
+EOF
+            chown "$TARGET_USER:$TARGET_USER" "$SECRETS_FILE" || true
+            chmod 600 "$SECRETS_FILE" || true
+            echo "f9-talk: seeded $SECRETS_FILE — paste your Deepgram key there."
+        fi
+    fi
+fi
+
+# 5. If upgrading from Python f9-talk (≤0.3.x), the dpkg replaces logic
 #    has already removed /opt/f9-talk + /usr/local/bin/f9-talk. We
 #    silently leave ~/.config/F9_talk/secrets.env untouched.
 echo "f9-talk: installed."

@@ -24,6 +24,27 @@ sudo dpkg -i f9-talk_*.deb
 sudo apt-get install -f
 ```
 
+The `.deb` is fully automated (binary, apps menu, autostart, udev rule,
+`input` group, secrets stub). The **AppImage** and **`curl | sh`**
+(cargo-dist) paths leave the system untouched, so reach the same end
+state with one extra `install` call:
+
+```bash
+# AppImage
+./f9-talk-*.AppImage install --user        # apps menu, autostart, secrets stub
+sudo ./f9-talk-*.AppImage install --system # udev rule + adds you to `input`
+
+# cargo-dist
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/moamen1358/f9-talk/releases/latest/download/f9-talk-installer.sh | sh
+f9-talk install --user
+sudo f9-talk install --system
+```
+
+`f9-talk uninstall [--user|--system]` reverses either step; secrets are
+always preserved. After any path, log out and back in once so the
+`input` group membership takes effect.
+
 Or run directly from this repo:
 
 ```bash
