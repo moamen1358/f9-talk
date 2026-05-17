@@ -38,7 +38,8 @@ sudo ./f9-talk-*.AppImage install --system # udev rule + adds you to `input`
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/moamen1358/f9-talk/releases/latest/download/f9-talk-installer.sh | sh
 f9-talk install --user
-sudo f9-talk install --system
+# `sudo` strips PATH; pass the absolute path or your $HOME for it to find the binary:
+sudo "$(command -v f9-talk)" install --system
 ```
 
 `f9-talk uninstall [--user|--system]` reverses either step; secrets are
