@@ -52,7 +52,13 @@ priority = "optional"
 # removes /opt/f9-talk before laying down the Rust binary.
 conflicts = "f9-talk (<= 0.3.99)"
 replaces = "f9-talk (<= 0.3.99)"
-depends = "$auto, libc6, libxkbcommon0, libxcb1, libxcb-render0, libxcb-shape0, libxcb-xfixes0, libasound2, libdbus-1-3"
+# `$auto` resolves the shared-library deps from the binary. The two
+# runtime tools (wl-clipboard for the layout-independent paste path on
+# Wayland, wtype as the per-key fallback) are separate executables, so
+# they're listed explicitly — installing the .deb pulls them in too.
+depends = "$auto, libc6, libxkbcommon0, libxcb1, libxcb-render0, libxcb-shape0, libxcb-xfixes0, libasound2, libdbus-1-3, wl-clipboard, wtype"
+# X11 sessions only — the typer's xdotool fallback.
+recommends = "xdotool"
 maintainer-scripts = "../../packaging/debian"
 assets = [
     # Binary

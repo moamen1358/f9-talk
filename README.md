@@ -15,16 +15,18 @@ native `wlr-layer-shell` voice wave; X11 is supported too.
 
 ## Install
 
-Easiest path — the prebuilt `.deb`:
+Easiest path — the prebuilt `.deb`. One command pulls in **everything**
+(the binary, its shared libraries, and the `wl-clipboard` + `wtype`
+typing tools):
 
 ```bash
 # Download from https://github.com/moamen1358/f9-talk/releases/latest
-sudo dpkg -i f9-talk_*.deb
-sudo apt-get install -f
+sudo apt install ./f9-talk_*.deb
 ```
 
 The `.deb` is fully automated (binary, apps menu, autostart, udev rule,
-`input` group, secrets stub). The **AppImage** and **`curl | sh`**
+`input` group, secrets stub). Then **log out and back in once** (for the
+`input` group) and set your API key — see below. That's the whole setup. The **AppImage** and **`curl | sh`**
 (cargo-dist) paths leave the system untouched, so reach the same end
 state with one extra `install` call:
 
