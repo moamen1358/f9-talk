@@ -95,7 +95,10 @@ fn install_user() -> Result<()> {
         fs::write(&secrets_path, SECRETS_STUB)
             .with_context(|| format!("write {secrets_path:?}"))?;
         fs::set_permissions(&secrets_path, fs::Permissions::from_mode(0o600))?;
-        println!("  ✓ seeded {} (chmod 600 — paste your Deepgram key)", secrets_path.display());
+        println!(
+            "  ✓ seeded {} (chmod 600 — paste your Deepgram key)",
+            secrets_path.display()
+        );
     } else {
         println!("  · kept {} (already exists)", secrets_path.display());
     }
@@ -139,19 +142,31 @@ fn install_system() -> Result<()> {
     let target_user = std::env::var("SUDO_USER").ok();
     if let Some(user) = target_user.as_deref() {
         // Add to input group. Best-effort.
-        let status = Command::new("usermod").args(["-aG", "input", user]).status();
+        let status = Command::new("usermod")
+            .args(["-aG", "input", user])
+            .status();
         match status {
             Ok(s) if s.success() => println!("  ✓ added {user} to the 'input' group"),
             Ok(s) => println!("  · usermod exited {s} — check manually"),
             Err(e) => println!("  · usermod failed: {e}"),
         }
     } else {
-        println!("  · SUDO_USER not set — skipping `usermod -aG input`. Run it manually for your user.");
+        println!(
+            "  · SUDO_USER not set — skipping `usermod -aG input`. Run it manually for your user."
+        );
     }
 
-    let _ = Command::new("udevadm").args(["control", "--reload-rules"]).status();
     let _ = Command::new("udevadm")
-        .args(["trigger", "--type=devices", "--action=add", "--subsystem-match=misc", "--sysname-match=uinput"])
+        .args(["control", "--reload-rules"])
+        .status();
+    let _ = Command::new("udevadm")
+        .args([
+            "trigger",
+            "--type=devices",
+            "--action=add",
+            "--subsystem-match=misc",
+            "--sysname-match=uinput",
+        ])
         .status();
     println!("  ✓ reloaded udev rules");
 
@@ -160,7 +175,9 @@ fn install_system() -> Result<()> {
     // anything for f9-talk to start working. The udev rule handles
     // every subsequent boot.
     if Path::new("/dev/uinput").exists() {
-        let _ = Command::new("chgrp").args(["input", "/dev/uinput"]).status();
+        let _ = Command::new("chgrp")
+            .args(["input", "/dev/uinput"])
+            .status();
         let _ = Command::new("chmod").args(["0660", "/dev/uinput"]).status();
         println!("  ✓ /dev/uinput is now group=input mode=0660");
     }
@@ -180,7 +197,9 @@ fn uninstall_system() -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(anyhow!("remove {rule_path:?}: {e}")),
     }
-    let _ = Command::new("udevadm").args(["control", "--reload-rules"]).status();
+    let _ = Command::new("udevadm")
+        .args(["control", "--reload-rules"])
+        .status();
     Ok(())
 }
 

@@ -229,7 +229,8 @@ fn main() -> anyhow::Result<()> {
     // Pre-compute initial position so the first frame doesn't flash at
     // the eframe default before maybe_reposition runs on the first press.
     if let Ok(pos) = f9_talk_ui::Positioner::new() {
-        if let Some((x, y)) = pos.compute_position(f9_talk_ui::INDICATOR_W, f9_talk_ui::INDICATOR_H) {
+        if let Some((x, y)) = pos.compute_position(f9_talk_ui::INDICATOR_W, f9_talk_ui::INDICATOR_H)
+        {
             viewport = viewport.with_position([x as f32, y as f32]);
         }
     }
