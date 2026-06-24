@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "f9-talk"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -998,7 +998,7 @@ dependencies = [
 
 [[package]]
 name = "f9-talk-audio"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "cpal",
@@ -1011,7 +1011,7 @@ dependencies = [
 
 [[package]]
 name = "f9-talk-core"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "parking_lot",
  "thiserror 2.0.18",
@@ -1021,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "f9-talk-input"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "f9-talk-stt"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1056,7 +1056,7 @@ dependencies = [
 
 [[package]]
 name = "f9-talk-ui"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "eframe",

@@ -4,6 +4,35 @@ All notable changes are documented here. Versions follow [Semantic Versioning](h
 
 ---
 
+## [0.6.0] — 2026-06-25 — Lean Deepgram-only rebuild
+
+A focused rewrite: hold F9 → Deepgram Nova-3 → type. ~2,900 fewer lines,
+295 → 222 dependencies, 11 MB → 8.4 MB binary.
+
+### Added
+- **Native Wayland indicator** — a `wlr-layer-shell` overlay rendered in
+  software: anchored bottom-center, no focus border, real transparency,
+  an anti-aliased neon voice wave. Rebuilt per dictation so it appears on
+  the focused monitor. Height tunable via `--indicator-margin`.
+- **Reliable, layout-independent typing** — atomic clipboard paste
+  (`wl-copy` + uinput Ctrl+V) on Wayland, so the compositor can't drop
+  characters and the active xkb layout no longer matters; the prior
+  clipboard is saved and restored.
+- **Self-contained packaging** — the `.deb` now pulls `wl-clipboard` +
+  `wtype`, and the AppImage bundles them, so one download works with
+  nothing else installed.
+
+### Removed
+- Local whisper.cpp backend, the translate feature, the GTK system tray,
+  and the API-key dialog. The hotkey is hardcoded to F9; the CLI is now
+  just `--indicator-margin`, `-v`, and `install`/`uninstall`.
+
+### Fixed
+- Generated autostart/desktop `Exec=` no longer passes the removed
+  `--backend` flag.
+
+---
+
 ## [0.5.1] — 2026-05-09 — Docs + dev tooling
 
 No runtime behaviour change. Same binary as 0.5.0.
