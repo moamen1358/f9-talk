@@ -48,9 +48,13 @@ pub fn preflight() -> Result<(), PreflightError> {
 pub struct Typer {
     device: VirtualDevice,
     clipboard: Option<arboard::Clipboard>,
-    has_xdotool: bool,
-    has_wtype: bool,
-    has_wl_paste: bool,
+    /// Resolved runnable paths for the helper tools the typer shells out
+    /// to — an AppImage-bundled copy (`$APPDIR/usr/bin`) is preferred over
+    /// `$PATH`. `None` when the tool is unavailable.
+    wl_copy: Option<String>,
+    wl_paste: Option<String>,
+    wtype: Option<String>,
+    xdotool: Option<String>,
 }
 
 impl Typer {
@@ -78,31 +82,41 @@ impl Typer {
             || std::env::var("XDG_SESSION_TYPE")
                 .map(|v| v.eq_ignore_ascii_case("wayland"))
                 .unwrap_or(false);
-        let has_xdotool = which("xdotool") && !on_wayland;
-        if on_wayland && which("xdotool") {
-            info!("Wayland session detected — skipping xdotool primary path (it silently no-ops on Wayland-native windows)");
+        // xdotool only works on X11 (on Wayland it types into XWayland's
+        // void). wl-copy/wl-paste/wtype are the Wayland paths. Each tool
+        // is resolved with an AppImage-bundled copy preferred, so a
+        // self-contained AppImage works with nothing installed system-wide.
+        let xdotool = if on_wayland {
+            None
+        } else {
+            tool_path("xdotool")
+        };
+        if on_wayland && tool_path("xdotool").is_some() {
+            info!(
+                "Wayland session detected — skipping xdotool (it no-ops on Wayland-native windows)"
+            );
         }
 
         // Atomic clipboard paste — the preferred Wayland path. `wl-copy`
         // publishes the whole transcript, then a single uinput Ctrl+V
         // pastes it. Because the text lands in ONE paste rather than
-        // key-by-key, the compositor cannot drop characters. This matters
-        // on cosmic-comp, which drops fast `zwp_virtual_keyboard` events
-        // (wtype) and uinput scancodes alike — observed as missing spaces
-        // mid-transcript. The previous clipboard is saved and restored so
-        // dictation doesn't clobber it. Needs both `wl-copy` + `wl-paste`.
-        let has_wl_paste = on_wayland && which("wl-copy") && which("wl-paste");
+        // key-by-key, the compositor cannot drop characters (cosmic-comp
+        // drops fast per-key events from wtype and uinput alike — observed
+        // as missing spaces mid-transcript). The prior clipboard is saved
+        // and restored. Needs both wl-copy + wl-paste.
+        let (wl_copy, wl_paste) = if on_wayland {
+            (tool_path("wl-copy"), tool_path("wl-paste"))
+        } else {
+            (None, None)
+        };
 
-        // wtype: per-key injection via `zwp_virtual_keyboard_v1` with its
-        // OWN keymap (layout-independent). Kept as the Wayland fallback
-        // when wl-clipboard isn't installed; less reliable than paste
-        // because the compositor can drop individual keystrokes.
-        let has_wtype = which("wtype") && on_wayland;
+        // wtype: per-key Wayland injection (layout-independent). Fallback
+        // when wl-clipboard is missing; less reliable than paste.
+        let wtype = if on_wayland { tool_path("wtype") } else { None };
 
         // arboard clipboard fallback (mainly X11; on Wayland it needs
-        // wl-clipboard to actually publish, hence the gate).
-        let has_wl_clipboard = which("wl-copy");
-        let clipboard = if on_wayland && !has_wl_clipboard {
+        // wl-clipboard present to actually publish).
+        let clipboard = if on_wayland && tool_path("wl-copy").is_none() {
             None
         } else {
             match arboard::Clipboard::new() {
@@ -114,11 +128,11 @@ impl Typer {
             }
         };
 
-        let primary = if has_wl_paste {
+        let primary = if wl_copy.is_some() && wl_paste.is_some() {
             "clipboard paste (wl-copy + Ctrl+V, atomic)"
-        } else if has_wtype {
+        } else if wtype.is_some() {
             "wtype (Wayland virtual-keyboard, layout-independent)"
-        } else if has_xdotool {
+        } else if xdotool.is_some() {
             "xdotool"
         } else if clipboard.is_some() {
             "clipboard+Ctrl+V"
@@ -132,9 +146,10 @@ impl Typer {
         Ok(Typer {
             device,
             clipboard,
-            has_xdotool,
-            has_wtype,
-            has_wl_paste,
+            wl_copy,
+            wl_paste,
+            wtype,
+            xdotool,
         })
     }
 
@@ -145,7 +160,7 @@ impl Typer {
         sleep(PRE_TYPE_SLEEP);
 
         // Atomic clipboard paste — preferred on Wayland; can't drop chars.
-        if self.has_wl_paste {
+        if self.wl_copy.is_some() && self.wl_paste.is_some() {
             match self.type_via_wl_paste(text) {
                 Ok(()) => return Ok(()),
                 Err(e) => warn!("clipboard-paste path failed ({e}); falling back to wtype"),
@@ -153,7 +168,7 @@ impl Typer {
         }
 
         // wtype: layout-independent per-key Wayland injection (fallback).
-        if self.has_wtype {
+        if self.wtype.is_some() {
             match self.type_via_wtype(text) {
                 Ok(()) => return Ok(()),
                 Err(e) => {
@@ -162,8 +177,8 @@ impl Typer {
             }
         }
 
-        if self.has_xdotool {
-            match std::process::Command::new("xdotool")
+        if let Some(xdotool) = &self.xdotool {
+            match std::process::Command::new(xdotool)
                 .args(["type", "--clearmodifiers", "--delay", "0", "--", text])
                 .status()
             {
@@ -208,16 +223,26 @@ impl Typer {
     /// transcript is inserted atomically, so the compositor can't drop
     /// characters the way it does with per-key injection.
     fn type_via_wl_paste(&mut self, text: &str) -> anyhow::Result<()> {
+        // Cloned out so the &mut self borrow for send_ctrl_v doesn't clash.
+        let wl_copy_bin = self
+            .wl_copy
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("wl-copy unavailable"))?;
+        let wl_paste_bin = self
+            .wl_paste
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("wl-paste unavailable"))?;
+
         // Save the current clipboard text (best-effort) so we can restore
         // it; dictation shouldn't silently eat what the user had copied.
-        let saved = std::process::Command::new("wl-paste")
+        let saved = std::process::Command::new(&wl_paste_bin)
             .arg("--no-newline")
             .output()
             .ok()
             .filter(|o| o.status.success())
             .map(|o| o.stdout);
 
-        wl_copy(text.as_bytes())?;
+        wl_copy(&wl_copy_bin, text.as_bytes())?;
         sleep(Duration::from_millis(40));
         self.send_ctrl_v()?;
         // Give the focused app time to consume the paste before we put the
@@ -226,12 +251,12 @@ impl Typer {
 
         match saved {
             Some(prev) if !prev.is_empty() => {
-                if let Err(e) = wl_copy(&prev) {
+                if let Err(e) = wl_copy(&wl_copy_bin, &prev) {
                     warn!("could not restore clipboard: {e}");
                 }
             }
             _ => {
-                let _ = std::process::Command::new("wl-copy")
+                let _ = std::process::Command::new(&wl_copy_bin)
                     .arg("--clear")
                     .status();
             }
@@ -248,7 +273,11 @@ impl Typer {
         use std::io::Write;
         use std::process::Stdio;
 
-        let mut child = std::process::Command::new("wtype")
+        let wtype_bin = self
+            .wtype
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("wtype unavailable"))?;
+        let mut child = std::process::Command::new(wtype_bin)
             .args(["-d", WTYPE_KEY_DELAY_MS, "-"])
             .stdin(Stdio::piped())
             .spawn()
@@ -321,14 +350,14 @@ fn key_event(key: KeyCode, value: i32) -> InputEvent {
     InputEvent::new(EventType::KEY.0, key.code(), value)
 }
 
-/// Publish `bytes` to the Wayland clipboard via `wl-copy`. `wl-copy`
-/// forks a background server that serves the selection and the
+/// Publish `bytes` to the Wayland clipboard via `wl-copy` (at path `bin`).
+/// `wl-copy` forks a background server that serves the selection and the
 /// foreground process exits, so `wait()` returns promptly.
-fn wl_copy(bytes: &[u8]) -> anyhow::Result<()> {
+fn wl_copy(bin: &str, bytes: &[u8]) -> anyhow::Result<()> {
     use std::io::Write;
     use std::process::Stdio;
 
-    let mut child = std::process::Command::new("wl-copy")
+    let mut child = std::process::Command::new(bin)
         .stdin(Stdio::piped())
         .spawn()
         .map_err(|e| anyhow::anyhow!("wl-copy spawn failed: {e}"))?;
@@ -354,6 +383,24 @@ fn which(cmd: &str) -> bool {
         }
     }
     false
+}
+
+/// Resolve a helper tool to a runnable path, preferring an AppImage-
+/// bundled copy at `$APPDIR/usr/bin/<name>`, then falling back to `$PATH`
+/// (returned as the bare name). `None` if the tool is nowhere to be found.
+fn tool_path(name: &str) -> Option<String> {
+    bundled_tool(std::env::var_os("APPDIR"), name).or_else(|| which(name).then(|| name.to_string()))
+}
+
+/// The `$APPDIR/usr/bin/<name>` copy, if `appdir` is set and the file
+/// exists. Split out (and taking `appdir` as a parameter) so it's
+/// testable without mutating the process environment.
+fn bundled_tool(appdir: Option<std::ffi::OsString>, name: &str) -> Option<String> {
+    let appdir = appdir?;
+    let bundled = std::path::Path::new(&appdir).join("usr/bin").join(name);
+    bundled
+        .is_file()
+        .then(|| bundled.to_string_lossy().into_owned())
 }
 
 fn ascii_char_to_key(c: char) -> Option<(KeyCode, bool)> {
@@ -498,3 +545,24 @@ const EVERY_KEY_WE_USE: &[KeyCode] = &[
     KeyCode::KEY_LEFTALT,
     KeyCode::KEY_RIGHTALT,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::bundled_tool;
+
+    #[test]
+    fn bundled_tool_prefers_appdir_copy() {
+        let dir = std::env::temp_dir().join(format!("f9-tooltest-{}", std::process::id()));
+        let bin = dir.join("usr/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("wl-copy"), b"x").unwrap();
+
+        let found = bundled_tool(Some(dir.clone().into_os_string()), "wl-copy");
+        assert_eq!(found.as_deref(), bin.join("wl-copy").to_str());
+        // Absent tool, and absent APPDIR, both resolve to None here.
+        assert!(bundled_tool(Some(dir.clone().into_os_string()), "nope").is_none());
+        assert!(bundled_tool(None, "wl-copy").is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

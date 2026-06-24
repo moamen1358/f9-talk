@@ -39,3 +39,8 @@ secrets.env
 target/
 Cargo.lock.bak
 .claude/
+
+# AppImage build artifacts
+/*.AppImage
+/AppDir/
+/squashfs-root/

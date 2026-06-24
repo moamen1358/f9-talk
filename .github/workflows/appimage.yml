@@ -43,7 +43,8 @@ jobs:
             libasound2-dev libdbus-1-dev libudev-dev libevdev-dev \
             libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxkbcommon-dev libfontconfig1-dev libxdo-dev \
-            pkg-config libfuse2
+            pkg-config libfuse2 \
+            wl-clipboard wtype
 
       - uses: dtolnay/rust-toolchain@stable
 

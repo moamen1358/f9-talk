@@ -38,6 +38,23 @@ mkdir -p "$APPDIR/usr/bin"
 cp "$BINARY" "$APPDIR/usr/bin/f9-talk"
 chmod 755 "$APPDIR/usr/bin/f9-talk"
 
+# Bundle the runtime typing tools so the AppImage is self-contained. The
+# typer shells out to wl-copy / wl-paste / wtype (crates/input/src/typer/
+# linux.rs) and looks for them at $APPDIR/usr/bin first. Passing each via
+# --executable makes linuxdeploy bundle their shared libraries too.
+EXTRA_EXECUTABLES=()
+for tool in wl-copy wl-paste wtype; do
+    src="$(command -v "$tool" 2>/dev/null || true)"
+    if [ -n "$src" ]; then
+        cp "$src" "$APPDIR/usr/bin/$tool"
+        chmod 755 "$APPDIR/usr/bin/$tool"
+        EXTRA_EXECUTABLES+=(--executable "$APPDIR/usr/bin/$tool")
+        echo "bundled $tool ($src)"
+    else
+        echo "WARNING: $tool not found on PATH — not bundling it"
+    fi
+done
+
 OUTPUT="$REPO_ROOT/f9-talk-${VERSION}-x86_64.AppImage"
 
 # Use linuxdeploy to create the AppImage — it automatically:
@@ -47,6 +64,7 @@ OUTPUT="$REPO_ROOT/f9-talk-${VERSION}-x86_64.AppImage"
 ARCH=x86_64 OUTPUT="$OUTPUT" "$LINUXDEPLOY" \
     --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/f9-talk" \
+    "${EXTRA_EXECUTABLES[@]}" \
     --desktop-file "$REPO_ROOT/packaging/debian/applications/f9-talk.desktop" \
     --icon-file "$REPO_ROOT/assets/f9-talk.svg" \
     --output appimage
