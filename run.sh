@@ -33,7 +33,13 @@ if pgrep -f 'f9-talk$' >/dev/null 2>&1; then
 fi
 
 # Forward args safely (handles spaces / quotes in user-supplied flags).
-escaped=$(printf '%q ' "$@")
+# Guard the no-arg case: `printf '%q ' "$@"` with zero args emits ''
+# which f9-talk then sees as a literal empty argument.
+if (( $# > 0 )); then
+    escaped=$(printf ' %q' "$@")
+else
+    escaped=""
+fi
 
 echo "==> launching ./target/release/f9-talk $*"
-exec sg input -c "RUST_LOG=info ./target/release/f9-talk ${escaped}"
+exec sg input -c "RUST_LOG=info ./target/release/f9-talk${escaped}"
