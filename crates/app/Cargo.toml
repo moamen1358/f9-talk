@@ -13,19 +13,15 @@ name = "f9-talk"
 path = "src/main.rs"
 
 [features]
-# CUDA + ydotool-fallback are wired up alongside the modules they gate (M2/M1).
 default = []
-cuda = ["f9-talk-stt/cuda"]
-cpu-only = ["f9-talk-stt/cpu-only"]
 ydotool-fallback = ["f9-talk-input/ydotool-fallback"]
 
 [dependencies]
 f9-talk-core = { path = "../core" }
 f9-talk-input = { path = "../input" }
 f9-talk-audio = { path = "../audio" }
-f9-talk-stt = { path = "../stt", default-features = false }
+f9-talk-stt = { path = "../stt" }
 f9-talk-ui = { path = "../ui" }
-f9-talk-translate = { path = "../translate" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -47,17 +43,16 @@ maintainer = "Moamen Ghareeb <moamen.ghareeb.11@gmail.com>"
 copyright = "2026, Moamen Ghareeb <moamen.ghareeb.11@gmail.com>"
 license-file = ["../../LICENSE", "0"]
 extended-description = """Hold F9 to dictate; text appears at your cursor.
-Cloud STT via Deepgram Nova-3 streaming, or local whisper.cpp
-(optional CUDA). Audio-reactive overlay indicator and system-tray
-controls. Linux-only (X11 + Wayland on compositors that support
-always-on-top transparent windows)."""
+Cloud STT via Deepgram Nova-3 streaming. Audio-reactive overlay
+indicator (a native wlr-layer-shell wave on Wayland). Linux X11 +
+Wayland."""
 section = "utils"
 priority = "optional"
 # Replaces / Conflicts on the Python f9-talk so `dpkg -i` cleanly
 # removes /opt/f9-talk before laying down the Rust binary.
 conflicts = "f9-talk (<= 0.3.99)"
 replaces = "f9-talk (<= 0.3.99)"
-depends = "$auto, libc6, libayatana-appindicator3-1, libgtk-3-0, libxkbcommon0, libxcb1, libxcb-render0, libxcb-shape0, libxcb-xfixes0, libasound2, libdbus-1-3"
+depends = "$auto, libc6, libxkbcommon0, libxcb1, libxcb-render0, libxcb-shape0, libxcb-xfixes0, libasound2, libdbus-1-3"
 maintainer-scripts = "../../packaging/debian"
 assets = [
     # Binary

@@ -10,7 +10,6 @@ use f9_talk_audio::RmsHandle;
 use parking_lot::Mutex;
 use tracing::warn;
 
-use crate::keys_dialog::{maybe_show_dialog, KeysDialogState};
 use crate::positioning::Positioner;
 
 /// Indicator runtime state shared with the app loop. The audio callback
@@ -67,34 +66,18 @@ pub struct IndicatorApp {
     reposition_frames_left: u32,
     pending_position: Option<egui::Pos2>,
     last_visible: bool,
-    keys_dialog: KeysDialogState,
-    /// When true, the visible indicator is the wlr-layer-shell overlay
-    /// (Wayland) running elsewhere; this eframe window stays hidden and
-    /// only hosts the keys-dialog viewport.
-    external_indicator: bool,
 }
 
 impl IndicatorApp {
-    pub fn new(
-        state: Arc<IndicatorState>,
-        keys_dialog: KeysDialogState,
-        external_indicator: bool,
-    ) -> Self {
-        // The X11 positioner is only needed for the eframe wave. Skip it
-        // (and its XWayland round-trip) when the layer-shell overlay owns
-        // the visual.
-        let positioner = if external_indicator {
-            None
-        } else {
-            match Positioner::new() {
-                Ok(p) => Some(p),
-                Err(e) => {
-                    warn!(
-                        "could not open X11 connection for smart positioning: {e:?}; \
-                        indicator will stay at the eframe default position"
-                    );
-                    None
-                }
+    pub fn new(state: Arc<IndicatorState>) -> Self {
+        let positioner = match Positioner::new() {
+            Ok(p) => Some(p),
+            Err(e) => {
+                warn!(
+                    "could not open X11 connection for smart positioning: {e:?}; \
+                    indicator will stay at the eframe default position"
+                );
+                None
             }
         };
         Self {
@@ -106,8 +89,6 @@ impl IndicatorApp {
             reposition_frames_left: 0,
             pending_position: None,
             last_visible: true,
-            keys_dialog,
-            external_indicator,
         }
     }
 
@@ -156,23 +137,6 @@ impl eframe::App for IndicatorApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Render the keys dialog when requested by the tray. It is a
-        // separate deferred viewport, so it works regardless of whether
-        // this main window is shown.
-        maybe_show_dialog(ctx, &self.keys_dialog);
-
-        // Wayland: the wlr-layer-shell overlay draws the pulse on its own
-        // thread. Keep this window permanently hidden (no box, no focus
-        // border) and just idle so the dialog viewport stays serviced.
-        if self.external_indicator {
-            if self.last_visible {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                self.last_visible = false;
-            }
-            ctx.request_repaint_after(std::time::Duration::from_millis(200));
-            return;
-        }
-
         let recording = *self.state.recording.lock();
         let status = self.state.status_text.lock().clone();
 

@@ -238,14 +238,13 @@ fn is_root() -> bool {
 ///   3. The absolute path of current_exe (cargo / hand-built binaries).
 fn launch_command() -> Result<String> {
     if let Some(appimage) = std::env::var_os("APPIMAGE") {
-        let s = appimage.to_string_lossy().to_string();
-        return Ok(format!("{s} --backend cloud"));
+        return Ok(appimage.to_string_lossy().to_string());
     }
     let exe = std::env::current_exe().context("resolving current_exe")?;
     if exe_is_on_path(&exe) {
-        return Ok("f9-talk --backend cloud".to_string());
+        return Ok("f9-talk".to_string());
     }
-    Ok(format!("{} --backend cloud", exe.display()))
+    Ok(exe.display().to_string())
 }
 
 fn exe_is_on_path(exe: &Path) -> bool {

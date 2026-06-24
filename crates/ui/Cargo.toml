@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "F9 Talk: egui indicator + tray + keys dialog."
+description = "F9 Talk: eframe wave indicator + Wayland layer-shell overlay."
 
 [lib]
 path = "src/lib.rs"
@@ -17,17 +17,9 @@ tracing = { workspace = true }
 parking_lot = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }
-egui_extras = { workspace = true }
-image = { workspace = true }
-tray-icon = { workspace = true }
-crossbeam-channel = { workspace = true }
-tokio = { workspace = true }
 anyhow = { workspace = true }
-dirs = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = { workspace = true }
-glib = { workspace = true }
 x11rb = { workspace = true }
 eframe = { workspace = true, features = ["x11"] }
 smithay-client-toolkit = "0.20"

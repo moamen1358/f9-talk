@@ -6,7 +6,6 @@ members = [
     "crates/audio",
     "crates/stt",
     "crates/ui",
-    "crates/translate",
     "crates/app",
 ]
 
@@ -37,8 +36,7 @@ serde_json = "1"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
-# Networking
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# Networking — Deepgram Nova-3 streaming over WebSocket.
 tokio-tungstenite = { version = "0.27", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 url = "2"
 
@@ -53,19 +51,12 @@ crossbeam-channel = "0.5"
 tokio-util = { version = "0.7", features = ["rt"] }
 arboard = "3"
 
-# STT (local)
-# whisper-rs is gated behind the `cuda` feature in the stt crate.
-
-# UI (cross-platform)
+# UI — eframe wave indicator (X11 / macOS / Windows fallback).
 eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow"] }
 egui = "0.32"
 egui_extras = "0.32"
-image = { version = "0.25", default-features = false, features = ["png"] }
-tray-icon = "0.21"
 
-# UI (Linux-only)
-gtk = "0.18"
-glib = "0.18"
+# UI (Linux-only) — X11 positioner for the eframe indicator.
 x11rb = "0.13"
 
 [profile.release]

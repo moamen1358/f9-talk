@@ -5,19 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "F9 Talk: STT backend trait + Deepgram Nova-3 / local Whisper impls."
+description = "F9 Talk: STT backend trait + Deepgram Nova-3 streaming impl."
 
 [lib]
 path = "src/lib.rs"
-
-[features]
-default = ["whisper"]
-# `whisper` pulls in whisper-rs (CPU-only by default).
-whisper = ["dep:whisper-rs", "dep:reqwest", "dep:sha2"]
-# `cuda` adds the CUDA feature on whisper-rs (needs nvcc / nvidia-cuda-toolkit).
-cuda = ["whisper", "whisper-rs/cuda"]
-# Old name kept for compat with the workspace doc — same as whisper.
-cpu-only = ["whisper"]
 
 [dependencies]
 f9-talk-core = { path = "../core" }
@@ -34,7 +25,3 @@ futures-util = "0.3"
 parking_lot = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }
-# Local Whisper backend (CPU by default; flip on with --features cuda).
-whisper-rs = { version = "0.14", optional = true }
-reqwest = { workspace = true, optional = true, features = ["blocking"] }
-sha2 = { version = "0.10", optional = true }

@@ -14,12 +14,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 # Linux build deps
 sudo apt install build-essential pkg-config \
     libasound2-dev libdbus-1-dev libudev-dev libevdev-dev \
-    libgtk-3-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev \
+    libxcb1-dev libxcb-render0-dev libxcb-shape0-dev \
     libxcb-xfixes0-dev libxkbcommon-dev libfontconfig1-dev \
-    libayatana-appindicator3-dev libssl-dev libxdo-dev libclang-dev
-
-# Optional: NVIDIA toolkit only if you want --features cuda for local STT
-sudo apt install nvidia-cuda-toolkit
+    libxdo-dev
 ```
 
 For runtime testing you also need to be in the `input` group + have the udev rule installed (see `packaging/README.md` and the **Install** section of the main `README.md`).
@@ -27,12 +24,9 @@ For runtime testing you also need to be in the `input` group + have the udev rul
 ## Building + running
 
 ```bash
-cargo build --release                    # default features (CPU whisper + cloud)
-cargo build --release --features cuda    # adds GPU acceleration for local Whisper
-cargo run --release -- --help            # see all CLI flags
-
-# Headless smoke (no indicator window — useful for CI / SSH)
-cargo run --release -- --backend cloud --headless -v
+cargo build --release          # the only build
+cargo run --release -- --help  # see all CLI flags
+cargo run --release -- -v      # run with verbose logging
 ```
 
 The binary lives at `target/release/f9-talk`.
@@ -42,12 +36,11 @@ The binary lives at `target/release/f9-talk`.
 ```
 crates/
 ├── core/       FRAME_BYTES, SAMPLE_RATE_HZ, FRAME_CHANNEL_CAPACITY constants
-├── input/      hotkey-listener wrapper (chord parser + 50 ms debounce) + typer
+├── input/      hotkey-listener wrapper (F9 + 50 ms debounce) + typer
 ├── audio/      cpal mic streamer with linear resampler + auto-restart
-├── stt/        Stt trait + Deepgram + whisper-rs implementations
-├── ui/         egui IndicatorApp + tray-icon + keys dialog + x11rb positioner
-├── translate/  Lingva (primary) + MyMemory (fallback) HTTP client
-└── app/        clap CLI + abstract-socket lock + glue
+├── stt/        Stt trait + Deepgram Nova-3 streaming client
+├── ui/         eframe IndicatorApp (X11) + wlr-layer-shell overlay (Wayland)
+└── app/        clap CLI + abstract-socket lock + session loop + glue
 ```
 
 ## CI bar before opening a PR
@@ -78,7 +71,7 @@ Useful info to attach:
 - **Distro + display server**: `lsb_release -ds`, `echo $XDG_SESSION_TYPE`.
 - **Audio stack**: `pactl info | grep "Server"` and `cpal` startup log line (`mic: device=… native_rate=… channels=…`).
 - **Per-press tracing line**: from `journalctl --user -t f9-talk -f`, the line with `press_to_release / first_byte_sent / release_to_final / transcript`.
-- **Whether `--headless` reproduces** — narrows down UI vs pipeline issues.
+- **The `f9_talk::press` log line** (`journalctl --user -t f9-talk -f`) — isolates STT pipeline vs typing issues.
 
 ## Releasing
 

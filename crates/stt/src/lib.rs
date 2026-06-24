@@ -1,13 +1,10 @@
-//! STT backend trait + concrete impls.
+//! STT backend trait + Deepgram Nova-3 streaming impl.
 //!
-//! Every backend implements [`Stt`] (async). v1 wraps:
-//! - [`deepgram::Deepgram`] — Nova-3 streaming (cloud)
-//! - [`whisper::WhisperLocal`] — whisper.cpp via whisper-rs (offline)
-//!
-//! All backends share the same press/release-driven session model:
+//! [`deepgram::Deepgram`] implements the async [`Stt`] trait with a
+//! press/release-driven session model:
 //!
 //! ```text
-//!   start() ───► persistent WS / model open
+//!   start() ───► persistent WS open
 //!   begin_session()
 //!     send_audio(frame) × N            (40 frames/sec × press duration)
 //!   end_session(timeout)  ─► Final transcript
@@ -17,7 +14,6 @@
 #![forbid(unsafe_code)]
 
 pub mod deepgram;
-pub mod whisper;
 
 use std::time::Duration;
 
@@ -65,7 +61,7 @@ pub enum SttError {
 /// keepalive logic belongs inside the implementation.
 #[async_trait]
 pub trait Stt: Send + Sync {
-    /// Static label for log lines (`"deepgram"`, `"whisper.cpp"`, …).
+    /// Static label for log lines (e.g. `"deepgram"`).
     fn name(&self) -> &'static str;
 
     /// Open the persistent WebSocket / load the model. Called once at

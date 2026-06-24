@@ -1,28 +1,11 @@
 # cargo-deny — license + advisory + bans audit.
-# Tightened over the project lifetime; the GTK3-rs ignores are
-# unavoidable while we depend on tray-icon → libappindicator → gtk3.
 
 [graph]
 all-features = false
 
 [advisories]
 yanked = "deny"
-ignore = [
-    # gtk-rs GTK3 bindings — unmaintained but still the only Linux
-    # tray-icon path. v0.4 ships with these knowingly.
-    "RUSTSEC-2024-0412", # atk
-    "RUSTSEC-2024-0413", # atk-sys
-    "RUSTSEC-2024-0415", # gdk
-    "RUSTSEC-2024-0416", # gdk-sys
-    "RUSTSEC-2024-0418", # gdkx11-sys (transitive)
-    "RUSTSEC-2024-0419", # gtk
-    "RUSTSEC-2024-0420", # gtk3-macros
-    # glib < 0.20: unsoundness in VariantStrIter — we don't iterate
-    # GVariants in our code paths.
-    "RUSTSEC-2024-0429",
-    # proc-macro-error: unmaintained but only used by gtk-rs derives.
-    "RUSTSEC-2024-0370",
-]
+ignore = []
 
 [licenses]
 allow = [
@@ -39,10 +22,9 @@ allow = [
     "CC0-1.0",
     "0BSD",
     "BSL-1.0",
-    "LGPL-3.0",      # libayatana-appindicator (dynamic link only)
+    "LGPL-3.0",
     "LGPL-2.1",
-    # Permissive font / data licenses pulled in by egui's default fonts
-    # and reqwest's webpki roots.
+    # Permissive font licenses pulled in by egui's default fonts.
     "OFL-1.1",
     "Ubuntu-font-1.0",
     "CDLA-Permissive-2.0",

@@ -6,7 +6,7 @@
 #   ./run.sh                       launch the existing release binary
 #   ./run.sh --build               rebuild first, then launch
 #   ./run.sh -v                    pass through to f9-talk (verbose logging)
-#   ./run.sh --target ar           or any other f9-talk flag
+#   ./run.sh --indicator-margin 80 or any other f9-talk flag
 #
 # What it does:
 #  1. cd to the repo root (works no matter where you call it from)
