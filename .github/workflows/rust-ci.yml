@@ -16,7 +16,7 @@ jobs:
     name: cargo check + clippy + test
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install system deps for cpal / eframe / wayland / X11
         run: |
@@ -62,7 +62,7 @@ jobs:
     name: cargo deny (licenses + advisories + bans)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           # `--all-features` is a *global* cargo-deny option that must
