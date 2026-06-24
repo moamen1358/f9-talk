@@ -14,6 +14,13 @@ const UINPUT_DEV: &str = "/dev/uinput";
 
 const KEY_DELAY: Duration = Duration::from_micros(2_500);
 
+// Inter-keystroke delay for wtype, in milliseconds. wtype defaults to 0,
+// which floods the compositor's virtual-keyboard queue fast enough that
+// cosmic-comp silently drops events (observed: missing spaces and
+// punctuation mid-transcript). A few ms between keystrokes makes it
+// reliable while staying imperceptibly fast for dictation-length text.
+const WTYPE_KEY_DELAY_MS: &str = "8";
+
 pub fn preflight() -> Result<(), PreflightError> {
     let dev = Path::new(UINPUT_DEV);
     if !dev.exists() {
@@ -42,6 +49,8 @@ pub struct Typer {
     device: VirtualDevice,
     clipboard: Option<arboard::Clipboard>,
     has_xdotool: bool,
+    has_wtype: bool,
+    has_wl_paste: bool,
 }
 
 impl Typer {
@@ -73,14 +82,27 @@ impl Typer {
         if on_wayland && which("xdotool") {
             info!("Wayland session detected — skipping xdotool primary path (it silently no-ops on Wayland-native windows)");
         }
-        // On Wayland the clipboard path needs `wl-clipboard` to publish
-        // text to the compositor. Without it, arboard's in-process
-        // clipboard means Ctrl+V pastes nothing. Bypass it: scancode
-        // synthesis via uinput works on every Wayland app and doesn't
-        // hijack the user's clipboard between dictations.
+
+        // Atomic clipboard paste — the preferred Wayland path. `wl-copy`
+        // publishes the whole transcript, then a single uinput Ctrl+V
+        // pastes it. Because the text lands in ONE paste rather than
+        // key-by-key, the compositor cannot drop characters. This matters
+        // on cosmic-comp, which drops fast `zwp_virtual_keyboard` events
+        // (wtype) and uinput scancodes alike — observed as missing spaces
+        // mid-transcript. The previous clipboard is saved and restored so
+        // dictation doesn't clobber it. Needs both `wl-copy` + `wl-paste`.
+        let has_wl_paste = on_wayland && which("wl-copy") && which("wl-paste");
+
+        // wtype: per-key injection via `zwp_virtual_keyboard_v1` with its
+        // OWN keymap (layout-independent). Kept as the Wayland fallback
+        // when wl-clipboard isn't installed; less reliable than paste
+        // because the compositor can drop individual keystrokes.
+        let has_wtype = which("wtype") && on_wayland;
+
+        // arboard clipboard fallback (mainly X11; on Wayland it needs
+        // wl-clipboard to actually publish, hence the gate).
         let has_wl_clipboard = which("wl-copy");
         let clipboard = if on_wayland && !has_wl_clipboard {
-            info!("Wayland without wl-clipboard — skipping clipboard+Ctrl+V path; using direct uinput scancode typing");
             None
         } else {
             match arboard::Clipboard::new() {
@@ -92,7 +114,11 @@ impl Typer {
             }
         };
 
-        let primary = if has_xdotool {
+        let primary = if has_wl_paste {
+            "clipboard paste (wl-copy + Ctrl+V, atomic)"
+        } else if has_wtype {
+            "wtype (Wayland virtual-keyboard, layout-independent)"
+        } else if has_xdotool {
             "xdotool"
         } else if clipboard.is_some() {
             "clipboard+Ctrl+V"
@@ -107,6 +133,8 @@ impl Typer {
             device,
             clipboard,
             has_xdotool,
+            has_wtype,
+            has_wl_paste,
         })
     }
 
@@ -115,6 +143,24 @@ impl Typer {
             return Ok(());
         }
         sleep(PRE_TYPE_SLEEP);
+
+        // Atomic clipboard paste — preferred on Wayland; can't drop chars.
+        if self.has_wl_paste {
+            match self.type_via_wl_paste(text) {
+                Ok(()) => return Ok(()),
+                Err(e) => warn!("clipboard-paste path failed ({e}); falling back to wtype"),
+            }
+        }
+
+        // wtype: layout-independent per-key Wayland injection (fallback).
+        if self.has_wtype {
+            match self.type_via_wtype(text) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    warn!("wtype path failed ({e}); falling back to clipboard/scancode")
+                }
+            }
+        }
 
         if self.has_xdotool {
             match std::process::Command::new("xdotool")
@@ -155,6 +201,73 @@ impl Typer {
             sleep(KEY_DELAY);
         }
         Ok(())
+    }
+
+    /// Set the clipboard to `text` via `wl-copy`, paste it with a single
+    /// uinput Ctrl+V, then restore the prior clipboard. The whole
+    /// transcript is inserted atomically, so the compositor can't drop
+    /// characters the way it does with per-key injection.
+    fn type_via_wl_paste(&mut self, text: &str) -> anyhow::Result<()> {
+        // Save the current clipboard text (best-effort) so we can restore
+        // it; dictation shouldn't silently eat what the user had copied.
+        let saved = std::process::Command::new("wl-paste")
+            .arg("--no-newline")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| o.stdout);
+
+        wl_copy(text.as_bytes())?;
+        sleep(Duration::from_millis(40));
+        self.send_ctrl_v()?;
+        // Give the focused app time to consume the paste before we put the
+        // old clipboard back.
+        sleep(Duration::from_millis(200));
+
+        match saved {
+            Some(prev) if !prev.is_empty() => {
+                if let Err(e) = wl_copy(&prev) {
+                    warn!("could not restore clipboard: {e}");
+                }
+            }
+            _ => {
+                let _ = std::process::Command::new("wl-copy")
+                    .arg("--clear")
+                    .status();
+            }
+        }
+        debug!("pasted {} chars via wl-copy + Ctrl+V", text.len());
+        Ok(())
+    }
+
+    /// Inject `text` through wtype, reading it from stdin (`wtype -d N -`).
+    /// stdin avoids wtype's argv flag-parsing entirely, so a transcript
+    /// starting with '-' types literally; `-d` paces keystrokes so the
+    /// compositor doesn't drop any.
+    fn type_via_wtype(&self, text: &str) -> anyhow::Result<()> {
+        use std::io::Write;
+        use std::process::Stdio;
+
+        let mut child = std::process::Command::new("wtype")
+            .args(["-d", WTYPE_KEY_DELAY_MS, "-"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("wtype spawn failed: {e}"))?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("wtype stdin unavailable"))?
+            .write_all(text.as_bytes())
+            .map_err(|e| anyhow::anyhow!("writing to wtype stdin failed: {e}"))?;
+        let status = child
+            .wait()
+            .map_err(|e| anyhow::anyhow!("waiting on wtype failed: {e}"))?;
+        if status.success() {
+            debug!("wtype typed {} chars", text.len());
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("wtype exited {status}"))
+        }
     }
 
     fn send_ctrl_v(&mut self) -> anyhow::Result<()> {
@@ -206,6 +319,29 @@ impl Typer {
 
 fn key_event(key: KeyCode, value: i32) -> InputEvent {
     InputEvent::new(EventType::KEY.0, key.code(), value)
+}
+
+/// Publish `bytes` to the Wayland clipboard via `wl-copy`. `wl-copy`
+/// forks a background server that serves the selection and the
+/// foreground process exits, so `wait()` returns promptly.
+fn wl_copy(bytes: &[u8]) -> anyhow::Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut child = std::process::Command::new("wl-copy")
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("wl-copy spawn failed: {e}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("wl-copy stdin unavailable"))?
+        .write_all(bytes)
+        .map_err(|e| anyhow::anyhow!("writing to wl-copy failed: {e}"))?;
+    child
+        .wait()
+        .map_err(|e| anyhow::anyhow!("wl-copy wait failed: {e}"))?;
+    Ok(())
 }
 
 fn which(cmd: &str) -> bool {
