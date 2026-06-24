@@ -8,9 +8,10 @@ cargo-dist-version = "0.31.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "powershell"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+installers = ["shell"]
+# Linux-only: the tool needs evdev (global F9 hotkey), uinput (typing),
+# and udev (setup) — none of which exist on macOS/Windows.
+targets = ["x86_64-unknown-linux-gnu"]
 # Where to host releases
 hosting = "github"
 # Whether to auto-include README/LICENSE/etc
@@ -33,10 +34,7 @@ libxcb-xfixes0-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
 libxkbcommon-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
 libfontconfig1-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
 libxdo-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
-libclang-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
-libssl-dev = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
 pkg-config = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
-cmake = { version = "*", targets = ["x86_64-unknown-linux-gnu"] }
 
 # Use ubuntu-22.04 for Linux builds (matching existing CI)
 [dist.github-custom-runners]
