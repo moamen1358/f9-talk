@@ -6,6 +6,7 @@
 
 pub mod indicator;
 pub mod keys_dialog;
+pub mod layer_indicator;
 pub mod positioning;
 pub mod tray;
 

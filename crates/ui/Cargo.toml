@@ -30,3 +30,5 @@ gtk = { workspace = true }
 glib = { workspace = true }
 x11rb = { workspace = true }
 eframe = { workspace = true, features = ["x11"] }
+smithay-client-toolkit = "0.20"
+wayland-client = "0.31"

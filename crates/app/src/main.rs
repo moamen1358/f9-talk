@@ -49,6 +49,11 @@ struct Cli {
     #[arg(long, default_value = "wave")]
     style: String,
 
+    /// Pixels the Wayland indicator sits above the bottom screen edge.
+    /// Raise it to clear an app's own bottom bar (e.g. video controls).
+    #[arg(long, default_value_t = 20)]
+    indicator_margin: i32,
+
     /// Run headless (no indicator window). Useful for the M2 smoke
     /// path or autostart on non-X11/Wayland sessions.
     #[arg(long)]
@@ -192,6 +197,22 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // On Wayland, the indicator is a native wlr-layer-shell overlay
+    // (bottom-center, no focus border, real transparency) running on its
+    // own thread; the eframe window below then stays hidden and only
+    // hosts the keys dialog. On X11 / macOS / Windows, eframe draws the
+    // wave as before.
+    let external_indicator = std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_SESSION_TYPE")
+            .map(|v| v.eq_ignore_ascii_case("wayland"))
+            .unwrap_or(false);
+    #[cfg(target_os = "linux")]
+    let _layer_indicator = external_indicator
+        .then(|| f9_talk_ui::layer_indicator::spawn(indicator_state.clone(), cli.indicator_margin));
+    if external_indicator {
+        info!("Wayland session: using wlr-layer-shell indicator (bottom-center, borderless)");
+    }
+
     // Indicator window dimensions: 360 × 80 — wider than the 320 px
     // pill so the wave layers' soft glow doesn't clip at the edges.
     let mut viewport = egui::ViewportBuilder::default()
@@ -244,7 +265,13 @@ fn main() -> anyhow::Result<()> {
     eframe::run_native(
         "f9-talk",
         native_options,
-        Box::new(move |_cc| Ok(Box::new(IndicatorApp::new(state_for_app, keys_for_app)))),
+        Box::new(move |_cc| {
+            Ok(Box::new(IndicatorApp::new(
+                state_for_app,
+                keys_for_app,
+                external_indicator,
+            )))
+        }),
     )
     .map_err(|e| anyhow::anyhow!("eframe error: {e}"))?;
 
