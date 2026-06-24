@@ -15,59 +15,42 @@ native `wlr-layer-shell` voice wave; X11 is supported too.
 
 ## Install
 
-Easiest path — the prebuilt `.deb`. One command pulls in **everything**
-(the binary, its shared libraries, and the `wl-clipboard` + `wtype`
-typing tools):
+The release ships a single self-contained **[AppImage](https://github.com/moamen1358/f9-talk/releases/latest)** —
+the binary, its libraries, and the `wl-clipboard` / `wtype` typing tools,
+all in one file. Five steps:
 
 ```bash
-# Download from https://github.com/moamen1358/f9-talk/releases/latest
-sudo apt install ./f9-talk_*.deb
+# 1. Download the latest f9-talk-*.AppImage from the releases page:
+#    https://github.com/moamen1358/f9-talk/releases/latest
+chmod +x f9-talk-*.AppImage
+
+# 2. One-time setup — desktop integration, then uinput access (needs sudo):
+./f9-talk-*.AppImage install --user         # apps menu + autostart
+sudo ./f9-talk-*.AppImage install --system  # udev rule + adds you to the `input` group
+
+# 3. Log out and back in once   ← so the `input`-group membership applies
+
+# 4. Add a Deepgram API key (free tier: https://console.deepgram.com/signup):
+echo 'DEEPGRAM_API_KEY=your_key_here' >> ~/.config/F9_talk/secrets.env
+
+# 5. Run it — or just log back in, it autostarts:
+./f9-talk-*.AppImage
 ```
 
-The `.deb` is fully automated (binary, apps menu, autostart, udev rule,
-`input` group, secrets stub). Then **log out and back in once** (for the
-`input` group) and set your API key — see below. That's the whole setup. The **AppImage** and **`curl | sh`**
-(cargo-dist) paths leave the system untouched, so reach the same end
-state with one extra `install` call:
+Then **hold F9, speak, release** — the transcript types at your cursor.
 
-```bash
-# AppImage
-./f9-talk-*.AppImage install --user        # apps menu, autostart, secrets stub
-sudo ./f9-talk-*.AppImage install --system # udev rule + adds you to `input`
+The only host requirement is **`libfuse2`** (every AppImage needs it) —
+`sudo apt install libfuse2` if it's missing. `f9-talk uninstall
+[--user|--system]` reverses step 2; your API key is always kept.
 
-# cargo-dist
-curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/moamen1358/f9-talk/releases/latest/download/f9-talk-installer.sh | sh
-f9-talk install --user
-# `sudo` strips PATH; pass the absolute path so it finds the binary:
-sudo "$(command -v f9-talk)" install --system
-```
-
-`f9-talk uninstall [--user|--system]` reverses either step; secrets are
-always preserved. After any path, **log out and back in once** so the
-`input` group membership takes effect.
-
-Or run straight from this repo:
+### Build from source
 
 ```bash
 git clone https://github.com/moamen1358/f9-talk.git
 cd f9-talk
-# One-time: Rust toolchain + Linux build deps (see docs/architecture.md
-# for the full apt line). Then:
+# One-time: Rust toolchain + Linux build deps (see docs/architecture.md).
 ./run.sh --build
 ```
-
-## Configure the API key
-
-Paste a Deepgram key into `~/.config/F9_talk/secrets.env`
-([free tier here](https://console.deepgram.com/signup)):
-
-```ini
-DEEPGRAM_API_KEY=your_key_here
-```
-
-(Or export `DEEPGRAM_API_KEY` in the environment.) Restart f9-talk after
-setting it.
 
 ## Use
 
@@ -85,8 +68,8 @@ F9, reacting to your voice.
 | `f9-talk install [--user\|--system]` | Set up desktop integration (apps menu, autostart, udev rule, `input` group) |
 | `f9-talk uninstall [--user\|--system]` | Reverse it. Secrets are preserved. |
 
-To make a flag permanent, edit `Exec=` in
-`/etc/xdg/autostart/f9-talk.desktop`.
+To make a flag permanent, edit `Exec=` in your autostart entry
+(`~/.config/autostart/f9-talk.desktop`).
 
 ## Build, architecture, troubleshooting
 
