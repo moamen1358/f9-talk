@@ -10,10 +10,15 @@ use std::time::Instant;
 
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, Region},
-    delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_shm,
+    delegate_compositor, delegate_layer, delegate_output, delegate_pointer, delegate_registry,
+    delegate_seat, delegate_shm,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
+    seat::{
+        pointer::{PointerEvent, PointerEventKind, PointerHandler, BTN_LEFT},
+        Capability, SeatHandler, SeatState,
+    },
     shell::{
         wlr_layer::{
             Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
@@ -23,22 +28,31 @@ use smithay_client_toolkit::{
     },
     shm::{slot::SlotPool, Shm, ShmHandler},
 };
-use tracing::warn;
+use tracing::{info, warn};
 use wayland_client::{
     globals::registry_queue_init,
-    protocol::{wl_output, wl_shm, wl_surface},
+    protocol::{wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
     Connection, QueueHandle,
 };
 
 use super::level::LevelSmoother;
-use super::render::{paint_wave, LEVEL_GAIN, WAVE_H, WAVE_W};
+use super::render::{paint_close, paint_dot, paint_wave, LEVEL_GAIN, WAVE_H, WAVE_W};
 use crate::indicator::IndicatorState;
 
 /// Default gap above the bottom screen edge, in px. Overridable per-run
 /// via the `--indicator-margin` flag.
 pub const DEFAULT_BOTTOM_MARGIN: i32 = 20;
-/// Below this smoothed level after release we draw nothing (fully hidden).
+/// Below this smoothed level after release the wave has settled, so we
+/// switch from the decaying wave back to the idle "ready" dot.
 const HIDE_BELOW: f32 = 0.02;
+
+/// Small clickable hotspot centred over the dot. The rest of the surface
+/// stays click-through; clicking this hotspot quits the tool. Sized to
+/// roughly match the dot's glow so the cursor only "catches" on the dot.
+const HOTSPOT_W: i32 = 26;
+const HOTSPOT_H: i32 = 26;
+const HOTSPOT_X: i32 = (WAVE_W as i32 - HOTSPOT_W) / 2;
+const HOTSPOT_Y: i32 = (WAVE_H as i32 - HOTSPOT_H) / 2;
 
 /// Connect to Wayland and run the indicator event loop. `bottom_margin`
 /// is the gap (px) above the bottom screen edge. Blocks until the
@@ -64,6 +78,9 @@ pub fn run(state: Arc<IndicatorState>, bottom_margin: i32) -> anyhow::Result<()>
     let mut app = LayerIndicator {
         registry_state: RegistryState::new(&globals),
         output_state: OutputState::new(&globals, &qh),
+        seat_state: SeatState::new(&globals, &qh),
+        pointer: None,
+        hovered: false,
         shm,
         pool,
         layer,
@@ -118,8 +135,11 @@ fn build_layer(
     layer.set_size(WAVE_W, WAVE_H);
     layer.set_margin(0, 0, bottom_margin.max(0), 0);
     layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+    // Click-through everywhere except a small hotspot over the dot, so the
+    // dot doubles as a "quit" button while the rest passes clicks through.
     let region = Region::new(compositor)
         .map_err(|e| anyhow::anyhow!("could not create input region: {e}"))?;
+    region.add(HOTSPOT_X, HOTSPOT_Y, HOTSPOT_W, HOTSPOT_H);
     layer.set_input_region(Some(region.wl_region()));
     layer.commit();
     Ok((layer, region))
@@ -128,6 +148,11 @@ fn build_layer(
 struct LayerIndicator {
     registry_state: RegistryState,
     output_state: OutputState,
+    seat_state: SeatState,
+    // Pointer for the clickable dot; created when the seat advertises one.
+    pointer: Option<wl_pointer::WlPointer>,
+    // True while the cursor is over the dot's hotspot — draws the "×".
+    hovered: bool,
     shm: Shm,
     pool: SlotPool,
     layer: LayerSurface,
@@ -163,6 +188,9 @@ impl LayerIndicator {
                 self.first_configure = true;
                 self.width = WAVE_W;
                 self.height = WAVE_H;
+                // The old surface is gone, so its hover is meaningless; the
+                // new surface re-enters if the cursor is actually over it.
+                self.hovered = false;
             }
             Err(e) => warn!("layer indicator: surface rebuild failed: {e}"),
         }
@@ -189,11 +217,16 @@ impl LayerIndicator {
         let level = (self.smoother.push(raw) * LEVEL_GAIN).clamp(0.0, 1.0);
         let anim_t = self.anim_t0.elapsed().as_secs_f32();
 
-        // Visible while held, plus a short tail as it decays after release.
+        // Wave while held (plus a short decay tail after release); once it
+        // settles, the idle "ready" dot — or, while the cursor hovers it,
+        // the "×" close affordance — so the user sees the tool is alive and
+        // knows a click on the dot quits it.
         if recording || self.smoother.level() > HIDE_BELOW {
             paint_wave(&mut self.scratch, self.width, self.height, level, anim_t);
+        } else if self.hovered {
+            paint_close(&mut self.scratch, self.width, self.height);
         } else {
-            self.scratch.iter_mut().for_each(|p| *p = 0);
+            paint_dot(&mut self.scratch, self.width, self.height, anim_t);
         }
 
         let stride = self.width as i32 * 4;
@@ -299,6 +332,70 @@ impl OutputHandler for LayerIndicator {
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {}
 }
 
+impl SeatHandler for LayerIndicator {
+    fn seat_state(&mut self) -> &mut SeatState {
+        &mut self.seat_state
+    }
+    fn new_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+    fn new_capability(
+        &mut self,
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+        seat: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        if capability == Capability::Pointer && self.pointer.is_none() {
+            match self.seat_state.get_pointer(qh, &seat) {
+                Ok(pointer) => self.pointer = Some(pointer),
+                Err(e) => warn!("layer indicator: could not get pointer: {e}"),
+            }
+        }
+    }
+    fn remove_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        if capability == Capability::Pointer {
+            if let Some(pointer) = self.pointer.take() {
+                pointer.release();
+            }
+        }
+    }
+    fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+}
+
+impl PointerHandler for LayerIndicator {
+    fn pointer_frame(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_pointer::WlPointer,
+        events: &[PointerEvent],
+    ) {
+        for event in events {
+            // Only our surface has an input region, but guard anyway.
+            if &event.surface != self.layer.wl_surface() {
+                continue;
+            }
+            match event.kind {
+                PointerEventKind::Enter { .. } => self.hovered = true,
+                PointerEventKind::Leave { .. } => self.hovered = false,
+                PointerEventKind::Press { button, .. } if button == BTN_LEFT => {
+                    // Clicking the dot is the tool's "quit" gesture. Exit the
+                    // whole process; the instance lock releases on exit and
+                    // the user relaunches from the apps menu.
+                    info!("f9-talk: quitting (indicator dot clicked)");
+                    std::process::exit(0);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 impl ShmHandler for LayerIndicator {
     fn shm_state(&mut self) -> &mut Shm {
         &mut self.shm
@@ -309,11 +406,13 @@ impl ProvidesRegistryState for LayerIndicator {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
-    registry_handlers![OutputState];
+    registry_handlers![OutputState, SeatState];
 }
 
 delegate_compositor!(LayerIndicator);
 delegate_output!(LayerIndicator);
 delegate_shm!(LayerIndicator);
 delegate_layer!(LayerIndicator);
+delegate_seat!(LayerIndicator);
+delegate_pointer!(LayerIndicator);
 delegate_registry!(LayerIndicator);
