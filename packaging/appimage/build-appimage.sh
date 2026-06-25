@@ -66,7 +66,7 @@ ARCH=x86_64 OUTPUT="$OUTPUT" "$LINUXDEPLOY" \
     --executable "$APPDIR/usr/bin/f9-talk" \
     "${EXTRA_EXECUTABLES[@]}" \
     --desktop-file "$REPO_ROOT/packaging/debian/applications/f9-talk.desktop" \
-    --icon-file "$REPO_ROOT/assets/f9-talk.svg" \
+    --icon-file "$REPO_ROOT/assets/f9-talk.png" \
     --output appimage
 
 # linuxdeploy may use a different output name; find and rename if needed
