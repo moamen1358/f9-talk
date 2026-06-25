@@ -4,6 +4,16 @@ All notable changes are documented here. Versions follow [Semantic Versioning](h
 
 ---
 
+## [0.6.2] — 2026-06-25 — Installed icon
+
+### Fixed
+- `install --user` now installs the app icon into the user's icon theme
+  (the icon is embedded in the binary), so the AppImage and cargo
+  installs show the f9-talk logo in the launcher instead of a blank
+  generic icon. Previously only the `.deb` shipped the icon.
+
+---
+
 ## [0.6.1] — 2026-06-25 — Terminal paste fix
 
 ### Fixed
