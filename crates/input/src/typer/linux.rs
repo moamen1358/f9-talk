@@ -129,7 +129,7 @@ impl Typer {
         };
 
         let primary = if wl_copy.is_some() && wl_paste.is_some() {
-            "clipboard paste (wl-copy + Ctrl+V, atomic)"
+            "clipboard paste (wl-copy + Ctrl+Shift+V, atomic)"
         } else if wtype.is_some() {
             "wtype (Wayland virtual-keyboard, layout-independent)"
         } else if xdotool.is_some() {
@@ -194,9 +194,9 @@ impl Typer {
         if let Some(cb) = self.clipboard.as_mut() {
             match cb.set_text(text) {
                 Ok(()) => {
-                    debug!("clipboard set ({} chars); sending Ctrl+V", text.len());
+                    debug!("clipboard set ({} chars); sending Ctrl+Shift+V", text.len());
                     sleep(Duration::from_millis(80));
-                    return self.send_ctrl_v();
+                    return self.send_paste();
                 }
                 Err(e) => {
                     warn!("clipboard set_text failed ({e}); falling back to scancode typing");
@@ -244,7 +244,7 @@ impl Typer {
 
         wl_copy(&wl_copy_bin, text.as_bytes())?;
         sleep(Duration::from_millis(40));
-        self.send_ctrl_v()?;
+        self.send_paste()?;
         // Give the focused app time to consume the paste before we put the
         // old clipboard back.
         sleep(Duration::from_millis(200));
@@ -299,11 +299,18 @@ impl Typer {
         }
     }
 
-    fn send_ctrl_v(&mut self) -> anyhow::Result<()> {
+    /// Send the paste shortcut: **Ctrl+Shift+V**. Plain Ctrl+V doesn't
+    /// paste in a terminal (there it means "insert the next character
+    /// literally"); terminals paste with Ctrl+Shift+V, and browsers /
+    /// most editors treat Ctrl+Shift+V as paste-plain-text. So this one
+    /// shortcut covers terminals and GUI apps alike.
+    fn send_paste(&mut self) -> anyhow::Result<()> {
         self.device.emit(&[
             key_event(KeyCode::KEY_LEFTCTRL, 1),
+            key_event(KeyCode::KEY_LEFTSHIFT, 1),
             key_event(KeyCode::KEY_V, 1),
             key_event(KeyCode::KEY_V, 0),
+            key_event(KeyCode::KEY_LEFTSHIFT, 0),
             key_event(KeyCode::KEY_LEFTCTRL, 0),
         ])?;
         Ok(())
