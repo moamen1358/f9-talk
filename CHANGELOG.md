@@ -4,6 +4,22 @@ All notable changes are documented here. Versions follow [Semantic Versioning](h
 
 ---
 
+## [0.7.0] — 2026-06-25 — Idle dot + click-to-quit
+
+### Added
+- **Idle "ready" dot.** When you're not dictating, the bottom-center
+  indicator now shows a small breathing red dot instead of nothing — so
+  you can always see at a glance that f9-talk is running and listening.
+  Hold F9 and it morphs into the voice wave; release and it settles back
+  to the dot.
+- **Click the dot to quit.** Hovering the dot turns it into a red "×"
+  close button; a left-click exits the tool cleanly (relaunch from the
+  apps menu, or it autostarts at next login). Only a small hotspot over
+  the dot is clickable — the rest of the overlay stays click-through, and
+  it still never takes keyboard focus.
+
+---
+
 ## [0.6.2] — 2026-06-25 — Installed icon
 
 ### Fixed

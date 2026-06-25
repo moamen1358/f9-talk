@@ -20,21 +20,26 @@ the binary, its libraries, and the `wl-clipboard` / `wtype` typing tools,
 all in one file. Five steps:
 
 ```bash
-# 1. Download the latest f9-talk-*.AppImage from the releases page:
-#    https://github.com/moamen1358/f9-talk/releases/latest
-chmod +x f9-talk-*.AppImage
+# 1. Download the latest self-contained AppImage into ~/Applications:
+mkdir -p ~/Applications && cd ~/Applications
+curl -fL -o f9-talk.AppImage "$(curl -fsSL \
+  https://api.github.com/repos/moamen1358/f9-talk/releases/latest \
+  | grep browser_download_url | grep '\.AppImage' | cut -d'"' -f4)"
+chmod +x f9-talk.AppImage
 
 # 2. One-time setup — desktop integration, then uinput access (needs sudo):
-./f9-talk-*.AppImage install --user         # apps menu + autostart
-sudo ./f9-talk-*.AppImage install --system  # udev rule + adds you to the `input` group
+./f9-talk.AppImage install --user         # apps menu, autostart, icon, secrets file
+sudo ./f9-talk.AppImage install --system  # udev rule + adds you to the `input` group
 
 # 3. Log out and back in once   ← so the `input`-group membership applies
 
-# 4. Add a Deepgram API key (free tier: https://console.deepgram.com/signup):
-echo 'DEEPGRAM_API_KEY=your_key_here' >> ~/.config/F9_talk/secrets.env
+# 4. Put your Deepgram API key in the .env file (free tier:
+#    https://console.deepgram.com/signup). This overwrites the placeholder
+#    that step 2 created at ~/.config/F9_talk/secrets.env:
+echo 'DEEPGRAM_API_KEY=your_key_here' > ~/.config/F9_talk/secrets.env
 
 # 5. Run it — or just log back in, it autostarts:
-./f9-talk-*.AppImage
+./f9-talk.AppImage
 ```
 
 Then **hold F9, speak, release** — the transcript types at your cursor.
@@ -54,9 +59,16 @@ cd f9-talk
 
 ## Use
 
-Hold **F9**, speak, release. The transcript is typed at your cursor. A
-red voice-wave appears at the bottom-center of the screen while you hold
-F9, reacting to your voice.
+Hold **F9**, speak, release — the transcript is typed at your cursor.
+
+A small **red dot** sits at the bottom-center of the screen whenever
+f9-talk is running, so you can see it's alive and listening. While you
+hold F9 it morphs into a red **voice wave** that reacts to your voice,
+then settles back to the dot on release.
+
+**To quit:** hover the dot — it turns into a red **×** — and click it.
+The tool exits cleanly; relaunch it from the apps menu (or just log in
+again, it autostarts).
 
 ## Options
 
