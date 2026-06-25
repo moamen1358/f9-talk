@@ -90,6 +90,8 @@ fn install_user() -> Result<()> {
         .with_context(|| format!("write {autostart_path:?}"))?;
     println!("  ✓ wrote {}", autostart_path.display());
 
+    install_user_icon()?;
+
     let secrets_path = secrets_dir.join("secrets.env");
     if !secrets_path.exists() {
         fs::write(&secrets_path, SECRETS_STUB)
@@ -109,10 +111,39 @@ fn install_user() -> Result<()> {
     Ok(())
 }
 
+/// App icon, embedded in the binary so it installs on every path
+/// (AppImage, cargo, system) with no external file to locate.
+const ICON_SVG: &[u8] = include_bytes!("../../../assets/f9-talk.svg");
+const ICON_PNG: &[u8] = include_bytes!("../../../assets/f9-talk.png");
+
+/// Write the app icon into the user's hicolor theme so the `.desktop`
+/// `Icon=f9-talk` actually resolves — otherwise the launcher shows a
+/// blank/generic icon.
+fn install_user_icon() -> Result<()> {
+    let hicolor = xdg_data_home().join("icons/hicolor");
+    let svg_dir = hicolor.join("scalable/apps");
+    let png_dir = hicolor.join("512x512/apps");
+    fs::create_dir_all(&svg_dir).with_context(|| format!("mkdir {svg_dir:?}"))?;
+    fs::create_dir_all(&png_dir).with_context(|| format!("mkdir {png_dir:?}"))?;
+    let svg = svg_dir.join("f9-talk.svg");
+    let png = png_dir.join("f9-talk.png");
+    fs::write(&svg, ICON_SVG).with_context(|| format!("write {svg:?}"))?;
+    fs::write(&png, ICON_PNG).with_context(|| format!("write {png:?}"))?;
+    println!("  ✓ installed icon {}", svg.display());
+    // Best-effort cache refresh so the icon shows without a logout.
+    let _ = Command::new("gtk-update-icon-cache")
+        .args(["-f", "-t"])
+        .arg(&hicolor)
+        .status();
+    Ok(())
+}
+
 fn uninstall_user() -> Result<()> {
     for p in [
         xdg_data_home().join("applications/f9-talk.desktop"),
         xdg_config_home().join("autostart/f9-talk.desktop"),
+        xdg_data_home().join("icons/hicolor/scalable/apps/f9-talk.svg"),
+        xdg_data_home().join("icons/hicolor/512x512/apps/f9-talk.png"),
     ] {
         match fs::remove_file(&p) {
             Ok(_) => println!("  ✓ removed {}", p.display()),
