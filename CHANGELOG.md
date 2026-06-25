@@ -4,6 +4,16 @@ All notable changes are documented here. Versions follow [Semantic Versioning](h
 
 ---
 
+## [0.6.1] — 2026-06-25 — Terminal paste fix
+
+### Fixed
+- Paste the transcript with **Ctrl+Shift+V** instead of Ctrl+V, so
+  dictation works in terminals — where Ctrl+V means "insert the next
+  character literally," not paste. Browsers and most editors treat
+  Ctrl+Shift+V as paste-plain-text, so the one shortcut covers both.
+
+---
+
 ## [0.6.0] — 2026-06-25 — Lean Deepgram-only rebuild
 
 A focused rewrite: hold F9 → Deepgram Nova-3 → type. ~2,900 fewer lines,
