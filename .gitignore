@@ -44,3 +44,4 @@ Cargo.lock.bak
 /*.AppImage
 /AppDir/
 /squashfs-root/
+logos/source/
