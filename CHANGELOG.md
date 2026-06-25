@@ -4,6 +4,16 @@ All notable changes are documented here. Versions follow [Semantic Versioning](h
 
 ---
 
+## [0.7.1] — 2026-06-25 — New brush logo
+
+### Changed
+- **New app logo** — a hand-painted red brush "F9" mark (AI-generated with
+  gpt-image-2) replaces the waveform icon everywhere: the embedded/installed
+  app icon (`f9-talk install` writes it into the icon theme), the
+  `.deb`/AppImage icon, and the README banner.
+
+---
+
 ## [0.7.0] — 2026-06-25 — Idle dot + click-to-quit
 
 ### Added
