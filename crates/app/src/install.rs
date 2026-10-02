@@ -326,7 +326,12 @@ fn apps_desktop(exec: &str) -> String {
          Icon=f9-talk\n\
          Categories=Utility;Accessibility;\n\
          Keywords=dictation;speech;voice;stt;\n\
-         StartupNotify=false\n"
+         StartupNotify=false\n\
+         Actions=Settings;\n\
+         \n\
+         [Desktop Action Settings]\n\
+         Name=Settings\n\
+         Exec={exec} settings\n"
     )
 }
 
@@ -347,6 +352,9 @@ fn autostart_desktop(exec: &str) -> String {
 }
 
 const SECRETS_STUB: &str = "# f9-talk secrets, loaded at startup.
+# Easiest: set your key in the Settings window (right-click the red dot,
+# or F9 Talk > Settings in the apps menu); it is kept in your desktop
+# keyring. This file is the fallback for systems without a keyring.
 # AssemblyAI is the default speech-to-text service: get a key at
 # https://www.assemblyai.com/dashboard (free credit on sign-up).
 # Deepgram is the alternative (backend = \"deepgram\" in config.toml):
@@ -368,3 +376,18 @@ const UDEV_RULE: &str = "# Allow members of the `input` group to write to /dev/u
 # single `=` or the rule silently no-ops and /dev/uinput stays root:root.
 KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"input\"
 ";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apps_menu_entry_has_a_settings_action() {
+        let d = apps_desktop("/opt/f9-talk.AppImage");
+        assert!(d.contains("\nExec=/opt/f9-talk.AppImage\n"));
+        assert!(d.contains("\nActions=Settings;\n"));
+        assert!(d.contains(
+            "\n[Desktop Action Settings]\nName=Settings\nExec=/opt/f9-talk.AppImage settings\n"
+        ));
+    }
+}

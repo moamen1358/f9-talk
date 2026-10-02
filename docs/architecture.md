@@ -36,7 +36,7 @@ The workspace under `crates/` is organized as:
 | `f9-talk-audio` | cpal mic streamer with linear resampler and RMS extraction for the wave indicator |
 | `f9-talk-stt` | `Stt` trait + AssemblyAI Universal-3.6 Pro (default) and Deepgram Nova-3 streaming WebSocket clients |
 | `f9-talk-ui` | eframe wave indicator (X11) + native `wlr-layer-shell` overlay (Wayland) + X11 positioner |
-| `f9-talk` (binary) | clap CLI, settings (`config.toml`, `keyterms.txt`) and secrets loader, abstract-socket lock, session loop, glue |
+| `f9-talk` (binary) | clap CLI, Settings window (egui), settings (`config.toml`, `keyterms.txt`) and keys (keyring / `secrets.env` / env), abstract-socket lock + reload channel, session loop, glue |
 
 ## Speech-to-text backends
 
@@ -115,6 +115,36 @@ use it:
 cargo test -p f9-talk --test e2e_dictation -- --ignored --nocapture
 ```
 
+## Settings window and keys
+
+`f9-talk settings` (`crates/app/src/settings_ui.rs`) is an egui window
+that runs as its own short-lived process, so it never shares a thread
+with the dictation loop or the Wayland indicator. It is opened by:
+
+- right-clicking the red dot (the layer indicator calls back into the
+  app, which spawns `f9-talk settings`);
+- the apps-menu entry's **Settings** action (`Exec=... settings`);
+- launching `f9-talk` while it already runs (the instance lock is taken,
+  so the second launch shows Settings instead of exiting);
+- the first run with no key, and an F9 press with no key (at most once
+  per 5 s).
+
+Save writes `config.toml` and `keyterms.txt`, stores changed keys, then
+sends `reload` to the running app over its instance-lock socket
+(abstract Unix datagram `@f9-talk-instance-lock`). The app stops the old
+backend and starts one from the new settings; a reload that arrives
+while F9 is held waits until that press is typed. If no instance is
+running, Save starts one.
+
+Keys (`crates/app/src/keys.rs`) are looked up in the environment, then
+the desktop keyring (Secret Service via the `keyring` crate, service
+`f9-talk`), then `secrets.env`. Save puts a key in the keyring and drops
+its line from `secrets.env`, or writes `secrets.env` with mode 600 when
+no keyring answers. Existing `secrets.env` keys keep working untouched.
+**Test key** makes one free request: AssemblyAI's `GET /v3/token`
+(mints a short-lived streaming token) or Deepgram's `GET /v1/projects`,
+and shows "works" or the service's own error with its HTTP status.
+
 ## Reliability mechanisms
 
 - WebSocket auto-reconnect on socket close and on send failures.
@@ -127,7 +157,8 @@ cargo test -p f9-talk --test e2e_dictation -- --ignored --nocapture
   and exits non-zero if the `input` group or `/dev/uinput` access is
   missing.
 - Single-instance lock on the abstract Unix socket
-  `\0f9-talk-instance-lock`.
+  `@f9-talk-instance-lock`, which also carries the Settings `reload`
+  message.
 
 ## Building from source
 
@@ -178,7 +209,7 @@ sudo dpkg -i target/debian/f9-talk_*.deb
 | Indicator on the wrong height / overlapping app bars | Raise it with `--indicator-margin <px>` (default 20). |
 | Indicator appears on the wrong monitor | The Wayland overlay is rebuilt each press onto the focused output; click into the target app first so it holds focus when you press F9. |
 | `no speech detected` | Hold F9 for at least 0.3 s before releasing. |
-| "Already running" with no visible window | `pkill -f /usr/bin/f9-talk` and relaunch. |
+| Launching opens Settings, but no red dot is visible | An old instance still holds the lock: `pkill -f f9-talk` and relaunch. |
 | `wgpu` panic at startup | The shipped binary uses the OpenGL `glow` renderer. |
 
 Logs are available via `journalctl --user -t f9-talk -f`. Per-press

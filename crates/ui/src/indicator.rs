@@ -19,6 +19,9 @@ pub struct IndicatorState {
     pub rms: RmsHandle,
     pub recording: Arc<Mutex<bool>>,
     pub status_text: Arc<Mutex<Option<String>>>,
+    /// Called when the user asks for Settings from the indicator
+    /// (right-click on the dot).
+    on_open_settings: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 impl IndicatorState {
@@ -27,6 +30,19 @@ impl IndicatorState {
             rms,
             recording: Arc::new(Mutex::new(false)),
             status_text: Arc::new(Mutex::new(None)),
+            on_open_settings: Mutex::new(None),
+        }
+    }
+
+    pub fn set_on_open_settings(&self, f: Arc<dyn Fn() + Send + Sync>) {
+        *self.on_open_settings.lock() = Some(f);
+    }
+
+    /// Run the "open Settings" action, if the app installed one.
+    pub fn open_settings(&self) {
+        let f = self.on_open_settings.lock().clone();
+        if let Some(f) = f {
+            f();
         }
     }
 

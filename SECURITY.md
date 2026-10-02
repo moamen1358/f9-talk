@@ -11,7 +11,7 @@
 f9-talk handles sensitive resources:
 
 - **Microphone audio** — captured locally via PulseAudio/PipeWire and streamed over TLS to the chosen speech-to-text service (AssemblyAI by default, or Deepgram). Audio is never written to disk.
-- **API keys** — stored in `~/.config/F9_talk/secrets.env` (mode `600`). Never logged or transmitted beyond the intended service.
+- **API keys**: saved by the Settings window in the desktop keyring (Secret Service), or in `~/.config/F9_talk/secrets.env` (mode `600`) when no keyring is running; environment variables are also read. Never logged or transmitted beyond the intended service.
 - **Keystroke injection** — text is injected via `xdotool` after transcription. No keystrokes are intercepted or logged beyond the hotkey trigger.
 
 ## Reporting a Vulnerability

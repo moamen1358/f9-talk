@@ -31,6 +31,9 @@ dirs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
+# Settings window: "Test key" requests, screenshots for the README.
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 eframe = { workspace = true }
 egui = { workspace = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
@@ -38,7 +41,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 tracing-journald = { workspace = true }
 libc = "0.2"
-eframe = { workspace = true, features = ["x11"] }
+eframe = { workspace = true, features = ["x11", "wayland"] }
+# API keys in the desktop keyring (Secret Service: GNOME Keyring, KWallet).
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [package.metadata.deb]
 name = "f9-talk"

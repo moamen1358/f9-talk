@@ -23,6 +23,10 @@ use f9_talk_input::{typer_preflight, HotkeyEvent, Typer};
 
 mod config;
 mod install;
+mod ipc;
+mod keycheck;
+mod keys;
+mod settings_ui;
 mod simulate;
 use config::{Backend, Settings};
 use f9_talk_stt::{BackendEvent, Stt};
@@ -64,6 +68,8 @@ enum Subcommand {
     Install(install::InstallArgs),
     /// Remove what `install` set up (keeps your secrets.env in place).
     Uninstall(install::InstallArgs),
+    /// Open the Settings window: service, API keys, language, key terms.
+    Settings(settings_ui::SettingsArgs),
     /// Stream a 16 kHz mono WAV through the configured backend at real-time
     /// pace, as if F9 were held for its length, and print what would be typed.
     #[command(hide = true)]
@@ -85,14 +91,17 @@ fn main() -> anyhow::Result<()> {
         Some(Subcommand::Install(args)) => return install::run(args),
         Some(Subcommand::Uninstall(args)) => return install::uninstall(args),
         Some(Subcommand::Simulate(args)) => return simulate::run(args),
+        Some(Subcommand::Settings(args)) => return settings_ui::run(args),
         None => {}
     }
 
-    let _lock = match acquire_instance_lock() {
+    let lock = match ipc::acquire_instance_lock() {
         Ok(lock) => lock,
         Err(_) => {
-            eprintln!("f9-talk is already running.");
-            std::process::exit(0);
+            // Launching it again (apps menu, autostart) while it runs
+            // opens the Settings window instead.
+            eprintln!("f9-talk is already running; opening Settings.");
+            return settings_ui::run(&settings_ui::SettingsArgs::default());
         }
     };
 
@@ -100,8 +109,6 @@ fn main() -> anyhow::Result<()> {
         eprintln!("\nf9-talk: {e}\n");
         std::process::exit(2);
     }
-
-    let secrets = load_secrets();
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -115,11 +122,16 @@ fn main() -> anyhow::Result<()> {
     drop(_guard);
 
     let indicator_state = Arc::new(IndicatorState::new(rms_handle));
+    // Right-clicking the red dot opens Settings.
+    indicator_state.set_on_open_settings(Arc::new(|| open_settings_window(false)));
 
-    let secrets_for_task = secrets.clone();
+    // Save in the Settings window sends "reload" to the lock socket.
+    let (control_tx, control_rx) = mpsc::channel::<ipc::Control>(8);
+    ipc::spawn_listener(&lock, control_tx);
+
     let state_for_task = indicator_state.clone();
     runtime.spawn(async move {
-        if let Err(e) = run_session_loop(secrets_for_task, frame_rx, state_for_task).await {
+        if let Err(e) = run_session_loop(frame_rx, state_for_task, control_rx).await {
             tracing::error!("session loop error: {e}");
         }
     });
@@ -229,93 +241,50 @@ fn init_tracing(verbose: bool) {
     }
 }
 
-// ── Instance lock ──────────────────────────────────────────────────
-// Linux: abstract Unix socket. macOS / Windows: advisory lock file.
-
-#[cfg(target_os = "linux")]
-fn acquire_instance_lock() -> anyhow::Result<Box<dyn std::any::Any>> {
-    use std::os::unix::net::UnixDatagram;
-    const INSTANCE_LOCK_NAME: &[u8] = b"\0f9-talk-instance-lock";
-
-    let socket = UnixDatagram::unbound()?;
-    bind_abstract(&socket, INSTANCE_LOCK_NAME)?;
-    Ok(Box::new(socket))
-}
-
-#[cfg(target_os = "linux")]
-fn bind_abstract(sock: &std::os::unix::net::UnixDatagram, name: &[u8]) -> anyhow::Result<()> {
-    use std::os::fd::AsRawFd;
-    if name.len() > 107 {
-        anyhow::bail!("abstract socket name too long: {} bytes", name.len());
-    }
-    let fd = sock.as_raw_fd();
-    let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
-    addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
-    for (i, b) in name.iter().enumerate() {
-        addr.sun_path[i] = *b as libc::c_char;
-    }
-    let addrlen = (std::mem::size_of::<libc::sa_family_t>() + name.len()) as libc::socklen_t;
-    let rc = unsafe { libc::bind(fd, &addr as *const _ as *const libc::sockaddr, addrlen) };
-    if rc != 0 {
-        let err = std::io::Error::last_os_error();
-        anyhow::bail!("bind on abstract socket failed: {err}");
-    }
-    Ok(())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn acquire_instance_lock() -> anyhow::Result<Box<dyn std::any::Any>> {
-    let lock_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine config directory"))?;
-    let lock_path = lock_dir.join("F9_talk").join(".instance.lock");
-    if let Some(parent) = lock_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&lock_path)?;
-    use std::io::Write;
-    let mut f = file;
-    writeln!(f, "{}", std::process::id())?;
-    Ok(Box::new(f))
-}
-
-/// API keys from the environment, then `secrets.env` (first occurrence
-/// wins). The installer's `PASTE_...` placeholders count as no key.
+/// API keys for both services, by variable name: environment, then the
+/// desktop keyring, then `secrets.env` (see `keys`).
 pub(crate) fn load_secrets() -> HashMap<String, String> {
+    let store = keys::KeyStore::new(config::config_dir());
     let mut out = HashMap::new();
-    for var in ["ASSEMBLYAI_API_KEY", "DEEPGRAM_API_KEY"] {
-        if let Ok(v) = std::env::var(var) {
-            if is_real_key(&v) {
-                out.insert(var.to_string(), v);
-            }
-        }
-    }
-    if let Some(path) = secrets_path() {
-        if let Ok(text) = std::fs::read_to_string(&path) {
-            for line in text.lines() {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                if let Some((k, v)) = line.split_once('=') {
-                    let k = k.trim().to_string();
-                    let v = v.trim().trim_matches('"').trim_matches('\'').to_string();
-                    if is_real_key(&v) {
-                        out.entry(k).or_insert(v);
-                    }
-                }
-            }
+    for b in [Backend::AssemblyAi, Backend::Deepgram] {
+        if let Some((key, source)) = store.get(b) {
+            debug!("{} found ({})", b.key_var(), source.describe());
+            out.insert(b.key_var().to_string(), key);
         }
     }
     out
 }
 
-fn secrets_path() -> Option<PathBuf> {
-    let config = dirs::config_dir()?;
-    Some(config.join("F9_talk").join("secrets.env"))
+/// Start another copy of this program (the AppImage when running from
+/// one), detached, with `args`; e.g. `["settings"]`.
+pub(crate) fn launch_self(args: &[&str]) -> anyhow::Result<()> {
+    use std::os::unix::process::CommandExt;
+    let exe = std::env::var_os("APPIMAGE")
+        .map(PathBuf::from)
+        .map_or_else(std::env::current_exe, Ok)?;
+    let mut child = std::process::Command::new(exe)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn()?;
+    // Reap it when it exits so no zombie is left behind.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+fn open_settings_window(first_run: bool) {
+    let args: &[&str] = if first_run {
+        &["settings", "--first-run"]
+    } else {
+        &["settings"]
+    };
+    if let Err(e) = launch_self(args) {
+        warn!("could not open the Settings window: {e}");
+    }
 }
 
 /// The text that gets typed. AssemblyAI's formatter writes em dashes
@@ -350,10 +319,6 @@ pub(crate) fn tidy_transcript(text: &str) -> String {
     out.trim().to_string()
 }
 
-fn is_real_key(v: &str) -> bool {
-    !v.is_empty() && !v.starts_with("PASTE_")
-}
-
 /// Build the backend `settings` asks for. When its key is missing but the
 /// other backend's key is there, use the other one (and say so) rather
 /// than not dictating at all.
@@ -375,7 +340,8 @@ pub(crate) fn build_backend(
             choice = other;
         } else {
             anyhow::bail!(
-                "needs {} set in the environment or in ~/.config/F9_talk/secrets.env",
+                "no API key yet: add one in Settings (right-click the red dot), \
+                 or set {} in the environment",
                 choice.key_var()
             );
         }
@@ -386,6 +352,7 @@ pub(crate) fn build_backend(
             key,
             f9_talk_stt::assemblyai::Config {
                 keyterms,
+                language: settings.language.clone(),
                 warm_secs: settings.assemblyai_warm_seconds,
                 ..Default::default()
             },
@@ -394,6 +361,7 @@ pub(crate) fn build_backend(
             key,
             f9_talk_stt::deepgram::Config {
                 keyterms,
+                language: settings.language.clone(),
                 ..Default::default()
             },
         )),
@@ -401,14 +369,57 @@ pub(crate) fn build_backend(
     Ok((backend, choice))
 }
 
+/// The live backend and the settings it was built from.
+struct Active {
+    backend: Arc<dyn Stt>,
+    settings: Settings,
+}
+
+/// Read settings and keys and start the chosen backend. `None` when no
+/// key is set yet (the caller opens Settings).
+async fn start_backend(events: &mpsc::Sender<BackendEvent>) -> Option<Active> {
+    let dir = config::config_dir();
+    let settings = config::load_settings(dir.as_deref());
+    let keyterms = config::load_keyterms(dir.as_deref());
+    let secrets = load_secrets();
+    let (backend, choice) = match build_backend(&settings, &secrets, keyterms.clone()) {
+        Ok(b) => b,
+        Err(e) => {
+            warn!("{e}");
+            return None;
+        }
+    };
+    if let Err(e) = backend.start(events.clone()).await {
+        warn!("could not start the {} backend: {e}", choice.label());
+        return None;
+    }
+    info!(
+        "{} backend ready (language {}, {} key terms, finalize safety net {:?})",
+        choice.label(),
+        settings.language,
+        keyterms.len(),
+        settings.finalize_timeout()
+    );
+    Some(Active { backend, settings })
+}
+
+/// Settings were saved: stop the old backend, start one from the new
+/// settings and keys.
+async fn reload(active: &mut Option<Active>, events: &mpsc::Sender<BackendEvent>) {
+    info!("settings changed; reloading the speech-to-text backend");
+    if let Some(old) = active.take() {
+        old.backend.stop().await;
+    }
+    *active = start_backend(events).await;
+}
+
 async fn run_session_loop(
-    secrets: HashMap<String, String>,
     mut frame_rx: mpsc::Receiver<f9_talk_audio::Frame>,
     indicator: Arc<IndicatorState>,
+    mut control_rx: mpsc::Receiver<ipc::Control>,
 ) -> anyhow::Result<()> {
-    let dir = config::config_dir();
-    if let Some(dir) = dir.as_deref() {
-        match config::seed_user_files(dir) {
+    if let Some(dir) = config::config_dir() {
+        match config::seed_user_files(&dir) {
             Ok(created) => {
                 for path in created {
                     info!("wrote default {}", path.display());
@@ -420,26 +431,13 @@ async fn run_session_loop(
             ),
         }
     }
-    let settings = config::load_settings(dir.as_deref());
-    let keyterms = config::load_keyterms(dir.as_deref());
-    let (backend, choice) = match build_backend(&settings, &secrets, keyterms.clone()) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("f9-talk: {e}");
-            std::process::exit(2);
-        }
-    };
     let (event_tx, mut event_rx) = mpsc::channel::<BackendEvent>(64);
-    backend
-        .start(event_tx)
-        .await
-        .map_err(|e| anyhow::anyhow!("could not start the {} backend: {e}", choice.label()))?;
-    info!(
-        "{} backend ready ({} key terms, finalize safety net {:?})",
-        choice.label(),
-        keyterms.len(),
-        settings.finalize_timeout()
-    );
+    let mut gate = settings_ui::OpenGate::new();
+    let mut active = start_backend(&event_tx).await;
+    if active.is_none() && gate.allow() {
+        info!("no API key yet; opening Settings");
+        open_settings_window(true);
+    }
 
     let mut hotkey_rx = match f9_talk_input::spawn_hotkey(HOTKEY) {
         Ok(rx) => rx,
@@ -459,14 +457,22 @@ async fn run_session_loop(
     spawn_wakeup_watcher();
 
     let mut session: Option<SessionInProgress> = None;
+    let mut reload_pending = false;
 
     loop {
         tokio::select! {
             evt = hotkey_rx.recv() => {
                 match evt {
                     Some(HotkeyEvent::Pressed) => {
+                        let Some(act) = active.as_ref() else {
+                            if gate.allow() {
+                                info!("F9 pressed but no API key is set; opening Settings");
+                                open_settings_window(true);
+                            }
+                            continue;
+                        };
                         let press_at = Instant::now();
-                        backend.begin_session().await;
+                        act.backend.begin_session().await;
                         indicator.set_recording(true);
                         indicator.set_status_text(None);
                         info!("🎙  recording…");
@@ -478,6 +484,8 @@ async fn run_session_loop(
                     }
                     Some(HotkeyEvent::Released) => {
                         let Some(mut sess) = session.take() else { continue; };
+                        let Some(act) = active.as_ref() else { continue; };
+                        let backend = &act.backend;
                         let release_at = Instant::now();
                         // Frames captured before the key-up can still be
                         // queued in the mic channel (select! may pick the
@@ -493,7 +501,7 @@ async fn run_session_loop(
                         // at once; the focus hand-back overlaps the wait.
                         indicator.set_recording(false);
                         indicator.set_status_text(None);
-                        let result = backend.end_session(settings.finalize_timeout()).await;
+                        let result = backend.end_session(act.settings.finalize_timeout()).await;
                         let final_at = Instant::now();
                         let settled = release_at.elapsed();
                         if settled < FOCUS_SETTLE {
@@ -515,10 +523,15 @@ async fn run_session_loop(
                         } else if let Err(e) = typer.type_text(&text) {
                             warn!("typer failed: {e}");
                         }
+                        if std::mem::take(&mut reload_pending) {
+                            reload(&mut active, &event_tx).await;
+                        }
                     }
                     None => {
                         warn!("hotkey channel closed; exiting");
-                        backend.stop().await;
+                        if let Some(act) = active.take() {
+                            act.backend.stop().await;
+                        }
                         return Ok(());
                     }
                 }
@@ -526,15 +539,29 @@ async fn run_session_loop(
             frame = frame_rx.recv() => {
                 let Some(f) = frame else {
                     warn!("mic channel closed; exiting");
-                    backend.stop().await;
+                    if let Some(act) = active.take() {
+                        act.backend.stop().await;
+                    }
                     return Ok(());
                 };
-                if let Some(sess) = session.as_mut() {
+                if let (Some(sess), Some(act)) = (session.as_mut(), active.as_ref()) {
                     if sess.first_byte_sent.is_none() {
                         sess.first_byte_sent = Some(Instant::now());
                     }
                     sess.frames_sent += 1;
-                    backend.send_audio(&f.bytes).await;
+                    act.backend.send_audio(&f.bytes).await;
+                }
+            }
+            ctl = control_rx.recv() => {
+                if ctl == Some(ipc::Control::Reload) {
+                    if session.is_some() {
+                        // Never swap backends under a held F9: the press
+                        // finishes on the old one, then this reload runs.
+                        info!("settings changed during a dictation; reloading after it");
+                        reload_pending = true;
+                    } else {
+                        reload(&mut active, &event_tx).await;
+                    }
                 }
             }
             evt = event_rx.recv() => {
@@ -547,7 +574,9 @@ async fn run_session_loop(
             }
             _ = tokio::signal::ctrl_c() => {
                 info!("Ctrl-C received; shutting down");
-                backend.stop().await;
+                if let Some(act) = active.take() {
+                    act.backend.stop().await;
+                }
                 return Ok(());
             }
         }

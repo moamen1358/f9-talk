@@ -40,6 +40,9 @@ if [[ -n "$TARGET_USER" ]]; then
             install -d -m 700 -o "$TARGET_USER" -g "$TARGET_USER" "$SECRETS_DIR" || true
             cat >"$SECRETS_FILE" <<'EOF'
 # f9-talk secrets, loaded at startup.
+# Easiest: set your key in the Settings window (right-click the red dot,
+# or F9 Talk > Settings in the apps menu); it is kept in your desktop
+# keyring. This file is the fallback for systems without a keyring.
 # AssemblyAI is the default speech-to-text service: get a key at
 # https://www.assemblyai.com/dashboard (free credit on sign-up).
 # Deepgram is the alternative (backend = "deepgram" in config.toml):

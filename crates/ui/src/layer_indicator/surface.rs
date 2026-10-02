@@ -16,7 +16,7 @@ use smithay_client_toolkit::{
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
-        pointer::{PointerEvent, PointerEventKind, PointerHandler, BTN_LEFT},
+        pointer::{PointerEvent, PointerEventKind, PointerHandler, BTN_LEFT, BTN_RIGHT},
         Capability, SeatHandler, SeatState,
     },
     shell::{
@@ -47,7 +47,8 @@ pub const DEFAULT_BOTTOM_MARGIN: i32 = 20;
 const HIDE_BELOW: f32 = 0.02;
 
 /// Small clickable hotspot centred over the dot. The rest of the surface
-/// stays click-through; clicking this hotspot quits the tool. Sized to
+/// stays click-through; a left-click on this hotspot quits the tool and a
+/// right-click opens Settings. Sized to
 /// roughly match the dot's glow so the cursor only "catches" on the dot.
 const HOTSPOT_W: i32 = 26;
 const HOTSPOT_H: i32 = 26;
@@ -389,6 +390,10 @@ impl PointerHandler for LayerIndicator {
                     // the user relaunches from the apps menu.
                     info!("f9-talk: quitting (indicator dot clicked)");
                     std::process::exit(0);
+                }
+                PointerEventKind::Press { button, .. } if button == BTN_RIGHT => {
+                    info!("f9-talk: opening Settings (indicator dot right-clicked)");
+                    self.state.open_settings();
                 }
                 _ => {}
             }

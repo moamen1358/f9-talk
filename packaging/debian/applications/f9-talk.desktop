@@ -9,3 +9,8 @@ Icon=f9-talk
 Categories=Utility;Accessibility;
 Keywords=dictation;speech;voice;stt;
 StartupNotify=false
+Actions=Settings;
+
+[Desktop Action Settings]
+Name=Settings
+Exec=f9-talk settings
