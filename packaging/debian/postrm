@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# postrm — runs after `dpkg -r f9-talk` or after a failed install.
+# postrm - runs after `dpkg -r f9-talk` or after a failed install.
 # We deliberately leave ~/.config/F9_talk/secrets.env alone so the
 # user's API keys survive a reinstall. The udev rule is removed by
 # dpkg automatically because we ship it via cargo-deb's `assets`.

@@ -109,7 +109,7 @@ pub fn spawn_with_debounce(
             match raw {
                 Ok(Some(RawEvent::Pressed(_))) => {
                     if pending_release.take().is_some() {
-                        debug!("hotkey re-press within debounce window — cancelling release");
+                        debug!("hotkey re-press within debounce window - cancelling release");
                         continue;
                     }
                     if press_sent {
@@ -127,7 +127,7 @@ pub fn spawn_with_debounce(
                     pending_release = Some(Instant::now());
                 }
                 Ok(None) => return,
-                Err(_) => { /* timeout — fall through to debounce check */ }
+                Err(_) => { /* timeout - fall through to debounce check */ }
             }
 
             if let Some(t) = pending_release {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run f9-talk straight from this source tree — no system install needed.
+# Run f9-talk straight from this source tree - no system install needed.
 # Useful for development: edit code, run ./run.sh --build, test.
 #
 # Usage:
@@ -22,7 +22,7 @@ if [[ "${1:-}" == "--build" ]]; then
     shift
     cargo build --release
 elif [[ ! -x ./target/release/f9-talk ]]; then
-    echo "==> release binary missing — building"
+    echo "==> release binary missing - building"
     cargo build --release
 fi
 

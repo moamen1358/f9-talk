@@ -204,11 +204,14 @@ sudo dpkg -i target/debian/f9-talk_*.deb
 
 | Symptom | Resolution |
 |---|---|
-| `/dev/uinput is not writable` | The `.deb` adds the user to the `input` group, but the GUI session must restart for it to take effect. Log out and back in once. |
-| Missing spaces / wrong characters when typing | Install `wl-clipboard` (`sudo apt install wl-clipboard`). The typer then pastes the whole transcript atomically — layout-independent, no dropped keystrokes. Without it the fallback is per-key injection, which some compositors mangle. |
+| `/dev/uinput is not writable`, or F9 does nothing | `install --system` (or the `.deb`) adds you to the `input` group, but the desktop session must restart for it to apply. Log out and back in once; `groups` must list `input`. |
+| Missing spaces / wrong characters when typing | The AppImage bundles `wl-clipboard`; for a source build install it (`sudo apt install wl-clipboard`). The typer then pastes the whole transcript at once: layout-independent, no dropped keystrokes. Without it the fallback is per-key injection, which some compositors mangle. |
 | Indicator on the wrong height / overlapping app bars | Raise it with `--indicator-margin <px>` (default 20). |
 | Indicator appears on the wrong monitor | The Wayland overlay is rebuilt each press onto the focused output; click into the target app first so it holds focus when you press F9. |
-| `no speech detected` | Hold F9 for at least 0.3 s before releasing. |
+| `no speech detected` in the log | The service heard no words. Check the microphone: the red wave should move while you speak. |
+| Settings shows "Does not work: HTTP 401" or "HTTP 404: Invalid API key" | The key is wrong or was copied with a missing character: copy it again from the service's dashboard. |
+| The text is not typed into one particular app | On Wayland the text is pasted with Ctrl+Shift+V; an app that uses that shortcut for something else does not receive it. |
+| No red dot on GNOME | GNOME has no `wlr-layer-shell`, so the dot cannot be drawn. Dictation still works; open Settings from the apps menu. |
 | Launching opens Settings, but no red dot is visible | An old instance still holds the lock: `pkill -f f9-talk` and relaunch. |
 | `wgpu` panic at startup | The shipped binary uses the OpenGL `glow` renderer. |
 

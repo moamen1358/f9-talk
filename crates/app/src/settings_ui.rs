@@ -229,14 +229,15 @@ impl SettingsApp {
         if self.args.first_run || no_key {
             ui.add_space(4.0);
             egui::Frame::group(ui.style())
-                .stroke(egui::Stroke::new(1.0, BRAND_RED))
+                .stroke(egui::Stroke::new(1.0_f32, BRAND_RED))
                 .inner_margin(10.0)
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.label(RichText::new("Add an API key to start").strong());
                     ui.label(
                         "F9 Talk uses your own speech-to-text key. Both services give free \
-                         credit to start: AssemblyAI on sign-up, and Deepgram $200.",
+                         credit to start: $50 at AssemblyAI (about 110 hours of streaming) \
+                         and $200 at Deepgram.",
                     );
                     ui.horizontal_wrapped(|ui| {
                         ui.hyperlink_to("Get a free AssemblyAI key", ASSEMBLYAI_SIGNUP);
@@ -607,5 +608,51 @@ mod tests {
         assert!(matches!(&app.status, Status::Error(m) if m.contains("Deepgram")));
         assert!(!dir.join(config::CONFIG_FILE).exists());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The new-user path, driven through the same code the window's
+    /// buttons call (no GUI input): an empty settings folder, the key put
+    /// into the field, "Test key", then "Save". Keyring off, so the key
+    /// lands only in `$F9_FRESH_DIR/secrets.env`, which the caller shreds.
+    #[test]
+    #[ignore = "calls AssemblyAI; needs ASSEMBLYAI_API_KEY and F9_FRESH_DIR"]
+    fn fresh_user_tests_and_saves_a_key() {
+        let dir = PathBuf::from(std::env::var("F9_FRESH_DIR").expect("F9_FRESH_DIR"));
+        assert!(
+            !dir.join(config::CONFIG_FILE).exists(),
+            "not a fresh folder"
+        );
+        let key = std::env::var("ASSEMBLYAI_API_KEY").expect("key in env");
+        let mut app = SettingsApp::load(
+            dir.clone(),
+            SettingsArgs {
+                first_run: true,
+                ..Default::default()
+            },
+        );
+        app.store = KeyStore::without_keyring(Some(dir.clone()));
+        app.after_save = saved_ok;
+        let aai = Backend::AssemblyAi as usize;
+        app.keys[aai].env_set = false;
+        assert!(app.keys[aai].value.is_empty(), "a fresh user has no key");
+
+        // A wrong key first: the exact service error is shown.
+        assert!(keycheck::check_key(Backend::AssemblyAi, "not-a-real-key")
+            .unwrap_err()
+            .starts_with("HTTP 4"));
+        // Paste the key, Test key: works.
+        app.keys[aai].value = key;
+        assert_eq!(
+            keycheck::check_key(Backend::AssemblyAi, &app.keys[aai].value),
+            Ok(())
+        );
+        // Save.
+        app.save();
+        assert!(matches!(app.status, Status::Info(_)));
+        assert_eq!(config::load_settings(Some(&dir)), Settings::default());
+        assert_eq!(
+            app.store.get_stored(Backend::AssemblyAi).map(|(_, s)| s),
+            Some(KeySource::File)
+        );
     }
 }

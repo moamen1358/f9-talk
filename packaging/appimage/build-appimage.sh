@@ -11,7 +11,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BINARY="${1:-$REPO_ROOT/target/release/f9-talk}"
 
 if [ ! -f "$BINARY" ]; then
-    echo "Binary not found at $BINARY — building..."
+    echo "Binary not found at $BINARY - building..."
     cargo build --release --manifest-path "$REPO_ROOT/Cargo.toml"
     BINARY="$REPO_ROOT/target/release/f9-talk"
 fi
@@ -51,13 +51,13 @@ for tool in wl-copy wl-paste wtype; do
         EXTRA_EXECUTABLES+=(--executable "$APPDIR/usr/bin/$tool")
         echo "bundled $tool ($src)"
     else
-        echo "WARNING: $tool not found on PATH — not bundling it"
+        echo "WARNING: $tool not found on PATH - not bundling it"
     fi
 done
 
 OUTPUT="$REPO_ROOT/f9-talk-${VERSION}-x86_64.AppImage"
 
-# Use linuxdeploy to create the AppImage — it automatically:
+# Use linuxdeploy to create the AppImage - it automatically:
 # - Copies and bundles required shared libraries (GTK, X11, ALSA, etc.)
 # - Sets up the AppDir structure with desktop file and icon
 # - Generates the final .AppImage with appimagetool

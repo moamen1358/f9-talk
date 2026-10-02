@@ -1,6 +1,6 @@
 # Contributing to f9-talk
 
-Thank you for your interest. This guide covers everything you need to submit a quality contribution to the v0.4 Rust codebase.
+Thank you for your interest. This guide covers everything you need to submit a quality contribution.
 
 ## Development setup
 
@@ -40,13 +40,13 @@ crates/
 ├── audio/      cpal mic streamer with linear resampler + auto-restart
 ├── stt/        Stt trait + AssemblyAI and Deepgram streaming clients
 ├── ui/         eframe IndicatorApp (X11) + wlr-layer-shell overlay (Wayland)
-└── app/        clap CLI + abstract-socket lock + session loop + glue
+└── app/        clap CLI, Settings window, keys + config, instance lock, session loop
 ```
 
 ## CI bar before opening a PR
 
 ```bash
-# All four must pass green:
+# All of these must pass green:
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace --no-default-features --all-targets -- -D warnings
@@ -54,12 +54,12 @@ cargo test --workspace
 cargo deny --all-features check       # licenses + advisories + bans
 ```
 
-GitHub Actions runs the same checks on every push to `main` or PR — see `.github/workflows/rust-ci.yml`.
+GitHub Actions runs the same checks on every push to `main` or PR - see `.github/workflows/rust-ci.yml`.
 
 ## Style + conventions
 
 - Run `cargo fmt --all` before committing.
-- Keep `#![forbid(unsafe_code)]` on every lib crate. The one place we use `unsafe` (the abstract-socket `libc::bind` call in `crates/app/src/main.rs`) is in the binary, not a library.
+- Keep `#![forbid(unsafe_code)]` on every lib crate. The one place we use `unsafe` (`libc::getuid` in `crates/app/src/install.rs`) is in the binary, not a library.
 - Prefer `parking_lot::Mutex` over `std::sync::Mutex` for short critical sections inside the audio / paint loops.
 - Logging: `tracing` everywhere; use the `f9_talk::press` target for per-press telemetry so it's `journalctl --user -t f9-talk -f` greppable.
 - Add a `// Why:` comment on any `#[allow(...)]` so the next reader knows the trade-off.
@@ -70,20 +70,20 @@ Useful info to attach:
 
 - **Distro + display server**: `lsb_release -ds`, `echo $XDG_SESSION_TYPE`.
 - **Audio stack**: `pactl info | grep "Server"` and `cpal` startup log line (`mic: device=… native_rate=… channels=…`).
-- **Per-press tracing line**: from `journalctl --user -t f9-talk -f`, the line with `press_to_release / first_byte_sent / release_to_final / transcript`.
-- **The `f9_talk::press` log line** (`journalctl --user -t f9-talk -f`) — isolates STT pipeline vs typing issues.
+- **The per-press log line** (target `f9_talk::press`, from `journalctl --user -t f9-talk -f`): `press_to_release / release_to_final / transcript`. It separates speech-to-text problems from typing problems. It contains what you dictated, so trim it before posting.
 
 ## Releasing
 
-1. Bump `[workspace.package].version` in `Cargo.toml`.
-2. Add a section to `CHANGELOG.md`.
-3. `cargo deb -p f9-talk` produces `target/debian/f9-talk_<version>-1_amd64.deb`.
-4. Tag + push:
+1. Bump `[workspace.package].version` in `Cargo.toml` and write the notes in `docs/release-notes/vX.Y.Z.md`.
+2. Tag and push:
    ```bash
-   git tag -a v0.X.Y -m "v0.X.Y"
-   git push origin v0.X.Y
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git push origin vX.Y.Z
    ```
-5. Create a GitHub release at the tag and attach the `.deb`.
+3. The tag runs the **Release** workflow (cargo-dist: a `.tar.xz` of the binary and a shell installer), and when it succeeds the **AppImage** workflow builds the AppImage and attaches it to the same release.
+4. Put the notes on the release: `gh release edit vX.Y.Z --notes-file docs/release-notes/vX.Y.Z.md`.
+
+The `.deb` is optional and built by hand: `cargo deb -p f9-talk` produces `target/debian/f9-talk_<version>-1_amd64.deb`.
 
 ## License
 

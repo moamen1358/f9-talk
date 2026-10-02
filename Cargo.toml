@@ -52,12 +52,12 @@ crossbeam-channel = "0.5"
 tokio-util = { version = "0.7", features = ["rt"] }
 arboard = "3"
 
-# UI — eframe wave indicator (X11 / macOS / Windows fallback).
+# UI - eframe wave indicator (X11 / macOS / Windows fallback).
 eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow"] }
 egui = "0.32"
 egui_extras = "0.32"
 
-# UI (Linux-only) — X11 positioner for the eframe indicator.
+# UI (Linux-only) - X11 positioner for the eframe indicator.
 x11rb = "0.13"
 
 [profile.release]

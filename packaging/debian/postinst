@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# postinst — runs after `dpkg -i f9-talk_*.deb`. Sets up:
+# postinst - runs after `dpkg -i f9-talk_*.deb`. Sets up:
 # 1. udev rule for /dev/uinput so the input group can write to it.
 # 2. Icon cache refresh.
 # 3. Best-effort: add the installing user to the `input` group and
@@ -55,7 +55,7 @@ DEEPGRAM_API_KEY=PASTE_YOUR_DEEPGRAM_KEY_HERE
 EOF
             chown "$TARGET_USER:$TARGET_USER" "$SECRETS_FILE" || true
             chmod 600 "$SECRETS_FILE" || true
-            echo "f9-talk: seeded $SECRETS_FILE — paste your AssemblyAI key there."
+            echo "f9-talk: seeded $SECRETS_FILE - paste your AssemblyAI key there."
         fi
     fi
 fi

@@ -61,7 +61,7 @@ impl IndicatorState {
 // compositors (COSMIC) RGBA transparency isn't honored, so the
 // window rectangle always renders as an opaque box. By making the
 // window very thin we trade the "transparent wave" look for a clean
-// slim bar that still shows the wave — visually intentional instead
+// slim bar that still shows the wave - visually intentional instead
 // of looking like broken transparency.
 pub const INDICATOR_W: i32 = 320;
 pub const INDICATOR_H: i32 = 22;
@@ -110,7 +110,7 @@ impl IndicatorApp {
 
     fn update_smoothed_level(&mut self, raw: f32) {
         let raw = raw.max(0.0);
-        // Asymmetric EMA — fast rise (α=0.45), slow fall (α=0.15).
+        // Asymmetric EMA - fast rise (α=0.45), slow fall (α=0.15).
         // Matches Python `f9_talk/ui/indicator.py:_on_audio_level`.
         if raw > self.smoothed_level {
             self.smoothed_level = 0.55 * self.smoothed_level + 0.45 * raw;
@@ -124,7 +124,7 @@ impl IndicatorApp {
         // re-assert it for a few frames so X11 / mutter / KDE WMs that
         // ignore the very first request pick it up. On COSMIC (Wayland)
         // the compositor pins XWayland windows to its own placement
-        // policy regardless of client requests — see the
+        // policy regardless of client requests - see the
         // troubleshooting section of README. Nothing to do about that
         // here; the user sees the indicator wherever cosmic-comp puts
         // it (typically top-center).
@@ -159,7 +159,7 @@ impl eframe::App for IndicatorApp {
         self.maybe_reposition(ctx, recording);
 
         // Visibility tracks ONLY the recording state, not status_text.
-        // On Wayland (COSMIC), every map/unmap shifts keyboard focus —
+        // On Wayland (COSMIC), every map/unmap shifts keyboard focus -
         // so we keep the window mapped strictly while F9 is held and
         // unmap the instant it's released. Transcribing/translating/
         // typing all happen with the indicator hidden so the typer's
@@ -171,12 +171,12 @@ impl eframe::App for IndicatorApp {
         }
 
         if !recording && status.is_none() {
-            // Idle — drop to 1 fps so we wake quickly when state flips.
+            // Idle - drop to 1 fps so we wake quickly when state flips.
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
             return;
         }
 
-        // Active — keep ~60 fps.
+        // Active - keep ~60 fps.
         ctx.request_repaint_after(std::time::Duration::from_millis(16));
 
         let raw_rms = if recording {
@@ -220,7 +220,7 @@ impl eframe::App for IndicatorApp {
 }
 
 /// Build the 56-point wave path. Mirrors
-/// `f9_talk/ui/indicator.py:_build_wave_path` — silence ≈ 0.08, normal
+/// `f9_talk/ui/indicator.py:_build_wave_path` - silence ≈ 0.08, normal
 /// speech ≈ 1.0, loud ≈ 1.85 amplitude scale.
 fn build_wave_path(
     rect: egui::Rect,
@@ -263,22 +263,34 @@ fn paint_wave(painter: &egui::Painter, rect: egui::Rect, anim_t: f32, level: f32
     // Layer 1: outer wide soft glow
     painter.add(egui::Shape::line(
         main.clone(),
-        egui::Stroke::new(11.0, egui::Color32::from_rgba_unmultiplied(255, 40, 60, 35)),
+        egui::Stroke::new(
+            11.0_f32,
+            egui::Color32::from_rgba_unmultiplied(255, 40, 60, 35),
+        ),
     ));
     // Layer 2: mid glow
     painter.add(egui::Shape::line(
         main.clone(),
-        egui::Stroke::new(7.0, egui::Color32::from_rgba_unmultiplied(255, 50, 60, 70)),
+        egui::Stroke::new(
+            7.0_f32,
+            egui::Color32::from_rgba_unmultiplied(255, 50, 60, 70),
+        ),
     ));
     // Layer 3: echo wave (offset back in time)
     painter.add(egui::Shape::line(
         echo,
-        egui::Stroke::new(1.6, egui::Color32::from_rgba_unmultiplied(255, 90, 100, 90)),
+        egui::Stroke::new(
+            1.6_f32,
+            egui::Color32::from_rgba_unmultiplied(255, 90, 100, 90),
+        ),
     ));
     // Layer 4: crisp red top line. egui Stroke is solid colour rather
-    // than a Qt LinearGradient — close enough at this stroke width.
+    // than a Qt LinearGradient - close enough at this stroke width.
     painter.add(egui::Shape::line(
         main,
-        egui::Stroke::new(2.6, egui::Color32::from_rgba_unmultiplied(238, 60, 80, 245)),
+        egui::Stroke::new(
+            2.6_f32,
+            egui::Color32::from_rgba_unmultiplied(238, 60, 80, 245),
+        ),
     ));
 }

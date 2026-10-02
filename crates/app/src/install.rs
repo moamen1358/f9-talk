@@ -118,7 +118,7 @@ fn install_user() -> Result<()> {
     }
 
     // Best-effort: refresh the freedesktop apps DB so the entry appears
-    // without a logout. Ignore failures — non-fatal.
+    // without a logout. Ignore failures - non-fatal.
     let _ = Command::new("update-desktop-database").arg(&apps).status();
     Ok(())
 }
@@ -129,7 +129,7 @@ const ICON_SVG: &[u8] = include_bytes!("../../../assets/f9-talk.svg");
 const ICON_PNG: &[u8] = include_bytes!("../../../assets/f9-talk.png");
 
 /// Write the app icon into the user's hicolor theme so the `.desktop`
-/// `Icon=f9-talk` actually resolves — otherwise the launcher shows a
+/// `Icon=f9-talk` actually resolves - otherwise the launcher shows a
 /// blank/generic icon.
 fn install_user_icon() -> Result<()> {
     let hicolor = xdg_data_home().join("icons/hicolor");
@@ -190,12 +190,12 @@ fn install_system() -> Result<()> {
             .status();
         match status {
             Ok(s) if s.success() => println!("  ✓ added {user} to the 'input' group"),
-            Ok(s) => println!("  · usermod exited {s} — check manually"),
+            Ok(s) => println!("  · usermod exited {s} - check manually"),
             Err(e) => println!("  · usermod failed: {e}"),
         }
     } else {
         println!(
-            "  · SUDO_USER not set — skipping `usermod -aG input`. Run it manually for your user."
+            "  · SUDO_USER not set - skipping `usermod -aG input`. Run it manually for your user."
         );
     }
 
@@ -276,7 +276,7 @@ fn is_root() -> bool {
 /// Pick the `Exec=` line for the .desktop files.
 ///
 /// Priority:
-///   1. `$APPIMAGE` env var (set by the AppImage runtime) — points at the .AppImage on disk.
+///   1. `$APPIMAGE` env var (set by the AppImage runtime) - points at the .AppImage on disk.
 ///   2. The bare name `f9-talk` if our current_exe resolves to something on $PATH.
 ///   3. The absolute path of current_exe (cargo / hand-built binaries).
 fn launch_command() -> Result<String> {
@@ -341,7 +341,7 @@ fn autostart_desktop(exec: &str) -> String {
          Type=Application\n\
          Version=1.0\n\
          Name=F9 Talk\n\
-         Comment=Hold-to-talk dictation — auto-starts on login\n\
+         Comment=Hold-to-talk dictation - auto-starts on login\n\
          Exec={exec}\n\
          Icon=f9-talk\n\
          X-GNOME-Autostart-enabled=true\n\

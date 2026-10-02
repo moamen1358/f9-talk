@@ -161,7 +161,7 @@ impl Stt for Deepgram {
     async fn begin_session(&self) {
         *self.state.recording.lock() = true;
         self.state.session_finals.lock().clear();
-        // Drop any sender from a previous end_session — late finals
+        // Drop any sender from a previous end_session - late finals
         // from the prior press will find None and silently drop.
         *self.state.final_signal.lock() = None;
     }
@@ -245,7 +245,7 @@ async fn reconnect_loop(
         }
         let outcome = run_connection(&api_key, &url, &mut cmd_rx, &state).await;
         // If the previous attempt got far enough to actually open the
-        // socket, treat the next reconnect as fresh — backoff is for
+        // socket, treat the next reconnect as fresh - backoff is for
         // genuine connect failures, not for an in-flight session that
         // dropped after working.
         let was_healthy = state

@@ -5,7 +5,7 @@
 //! by default, Deepgram Nova-3 by one line in `config.toml`.
 //!
 //! Threading:
-//! - **Main thread**: drives the indicator — a Wayland `wlr-layer-shell`
+//! - **Main thread**: drives the indicator - a Wayland `wlr-layer-shell`
 //!   overlay (on its own thread) plus a Ctrl-C wait, or the eframe window
 //!   on X11 / macOS / Windows.
 //! - **Tokio runtime**: STT WebSocket client, hotkey listener, mic frame
@@ -86,7 +86,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Subcommands (install / uninstall) run before any of the dictation
-    // runtime is set up — they're pure filesystem work.
+    // runtime is set up - they're pure filesystem work.
     match cli.command.as_ref() {
         Some(Subcommand::Install(args)) => return install::run(args),
         Some(Subcommand::Uninstall(args)) => return install::uninstall(args),
@@ -182,7 +182,7 @@ fn run_eframe_indicator(
     {
         viewport = viewport.with_window_type(egui::X11WindowType::Notification);
     }
-    // Start hidden — IndicatorApp toggles visibility while F9 is held.
+    // Start hidden - IndicatorApp toggles visibility while F9 is held.
     viewport = viewport.with_visible(false);
     if let Ok(pos) = f9_talk_ui::Positioner::new() {
         if let Some((x, y)) = pos.compute_position(f9_talk_ui::INDICATOR_W, f9_talk_ui::INDICATOR_H)
@@ -220,6 +220,10 @@ fn init_tracing(verbose: bool) {
     {
         match tracing_journald::layer() {
             Ok(journald) => {
+                // A fixed tag, so `journalctl --user -t f9-talk` works the
+                // same for the AppImage (whose process is named
+                // `f9-talk.AppImage`) as for a plain binary.
+                let journald = journald.with_syslog_identifier("f9-talk".into());
                 registry
                     .with(journald)
                     .with(tracing_subscriber::fmt::layer().with_target(false))

@@ -2,7 +2,7 @@
 //!
 //! Anchored bottom-center, overlay layer, `keyboard-interactivity = none`
 //! and an empty input region (click-through). The compositor therefore
-//! never focuses it — so there is no focus/accent border — and clicks
+//! never focuses it - so there is no focus/accent border - and clicks
 //! pass straight through to whatever is underneath.
 
 use std::sync::Arc;
@@ -152,7 +152,7 @@ struct LayerIndicator {
     seat_state: SeatState,
     // Pointer for the clickable dot; created when the seat advertises one.
     pointer: Option<wl_pointer::WlPointer>,
-    // True while the cursor is over the dot's hotspot — draws the "×".
+    // True while the cursor is over the dot's hotspot - draws the "×".
     hovered: bool,
     shm: Shm,
     pool: SlotPool,
@@ -178,7 +178,7 @@ struct LayerIndicator {
 impl LayerIndicator {
     /// Tear down the current surface and build a fresh one. The
     /// compositor re-maps the new (`output = None`) surface onto the
-    /// active output, which is the one holding keyboard focus — i.e. the
+    /// active output, which is the one holding keyboard focus - i.e. the
     /// monitor the user just pressed F9 on.
     fn rebuild(&mut self, qh: &QueueHandle<Self>) {
         self.needs_rebuild = false;
@@ -214,13 +214,13 @@ impl LayerIndicator {
             0.0
         };
         // Smooth the raw mic RMS, then lift it into a 0..1 display range
-        // (speech RMS is ~0.05–0.1). Mirrors the old wave's amplification.
+        // (speech RMS is ~0.05-0.1). Mirrors the old wave's amplification.
         let level = (self.smoother.push(raw) * LEVEL_GAIN).clamp(0.0, 1.0);
         let anim_t = self.anim_t0.elapsed().as_secs_f32();
 
         // Wave while held (plus a short decay tail after release); once it
-        // settles, the idle "ready" dot — or, while the cursor hovers it,
-        // the "×" close affordance — so the user sees the tool is alive and
+        // settles, the idle "ready" dot - or, while the cursor hovers it,
+        // the "×" close affordance - so the user sees the tool is alive and
         // knows a click on the dot quits it.
         if recording || self.smoother.level() > HIDE_BELOW {
             paint_wave(&mut self.scratch, self.width, self.height, level, anim_t);

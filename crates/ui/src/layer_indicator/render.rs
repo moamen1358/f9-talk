@@ -1,6 +1,6 @@
 //! Pure software rasterizer for the voice-reactive **wave** indicator.
 //!
-//! Writes **premultiplied** ARGB8888 (`0xAARRGGBB`) — `wl_shm` treats
+//! Writes **premultiplied** ARGB8888 (`0xAARRGGBB`) - `wl_shm` treats
 //! ARGB buffers as premultiplied-alpha. Draws an anti-aliased glowing
 //! red sine-wave line: a bright crisp core over a soft neon halo, whose
 //! amplitude tracks the smoothed mic level. Background stays transparent
@@ -14,7 +14,7 @@ pub const WAVE_W: u32 = 130;
 pub const WAVE_H: u32 = 72;
 
 /// Gain applied to the smoothed mic RMS before it drives the amplitude.
-/// Speech RMS sits around 0.05–0.1, so ~12× lifts normal speech to a
+/// Speech RMS sits around 0.05-0.1, so ~12× lifts normal speech to a
 /// near-full wave.
 pub const LEVEL_GAIN: f32 = 12.0;
 
@@ -44,7 +44,7 @@ const DOT_GLOW_PEAK: f32 = 0.45;
 /// Overall opacity the breath swings between (low → high).
 const DOT_ALPHA_LO: f32 = 0.55;
 const DOT_ALPHA_HI: f32 = 0.95;
-/// Seconds per breath cycle — slow and calm, not a flicker.
+/// Seconds per breath cycle - slow and calm, not a flicker.
 const DOT_BREATH_PERIOD: f32 = 2.6;
 
 // --- Hover "close" button ----------------------------------------------
@@ -53,11 +53,11 @@ const CLOSE_DISC_R: f32 = 6.5;
 /// Half-length and half-thickness of the white "×" strokes (px).
 const CLOSE_ARM: f32 = 3.8;
 const CLOSE_STROKE_HALF: f32 = 1.15;
-/// Colour of the "×" — near-white so it reads clearly over the red disc.
+/// Colour of the "×" - near-white so it reads clearly over the red disc.
 const CLOSE_X: (f32, f32, f32) = (250.0, 250.0, 255.0);
 
 /// Wave displacement (~-1..1) at horizontal progress `p` (0..1) and time.
-/// Sum of detuned sines — the original eframe wave shape.
+/// Sum of detuned sines - the original eframe wave shape.
 fn wave_sample(p: f32, anim_t: f32) -> f32 {
     let t = anim_t * 5.5 + p * 7.0;
     0.55 * t.sin()
@@ -243,7 +243,7 @@ fn put_px(buf: &mut [u32], w: i32, x: i32, y: i32, (r, g, b): (f32, f32, f32), a
 }
 
 /// Alpha-composite a straight (non-premultiplied) colour `(r,g,b)` at
-/// coverage `sa` (0..1) **over** the existing premultiplied pixel —
+/// coverage `sa` (0..1) **over** the existing premultiplied pixel -
 /// `out = src + dst·(1−sa)`. Used to lay the white "×" over the red disc.
 fn blend_px(buf: &mut [u32], w: i32, x: i32, y: i32, (r, g, b): (f32, f32, f32), sa: f32) {
     let idx = (y * w + x) as usize;
@@ -351,7 +351,7 @@ mod tests {
                 let x = (i as u32 % WAVE_W) as f32;
                 let y = (i as u32 / WAVE_W) as f32;
                 let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
-                assert!(d < 16.0, "lit pixel {d:.1}px from centre — dot too big");
+                assert!(d < 16.0, "lit pixel {d:.1}px from centre - dot too big");
             }
         }
     }

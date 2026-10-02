@@ -31,7 +31,7 @@ pub fn preflight() -> Result<(), PreflightError> {
         Ok(_) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             warn!(
-                "preflight: {} is not writable yet — \
+                "preflight: {} is not writable yet - \
                 run `sudo usermod -aG input $USER` and install the udev rule \
                 (`packaging/debian/udev/99-f9-talk.rules`), then log out + in",
                 UINPUT_DEV
@@ -49,7 +49,7 @@ pub struct Typer {
     device: VirtualDevice,
     clipboard: Option<arboard::Clipboard>,
     /// Resolved runnable paths for the helper tools the typer shells out
-    /// to — an AppImage-bundled copy (`$APPDIR/usr/bin`) is preferred over
+    /// to - an AppImage-bundled copy (`$APPDIR/usr/bin`) is preferred over
     /// `$PATH`. `None` when the tool is unavailable.
     wl_copy: Option<String>,
     wl_paste: Option<String>,
@@ -75,7 +75,7 @@ impl Typer {
         sleep(Duration::from_millis(120));
 
         // xdotool only works on X11. On Wayland it returns exit 0 but
-        // types into XWayland's void — Wayland-native apps see nothing.
+        // types into XWayland's void - Wayland-native apps see nothing.
         // Detect via XDG_SESSION_TYPE / WAYLAND_DISPLAY and skip it so
         // the clipboard+Ctrl+V (uinput-injected) path takes over.
         let on_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
@@ -93,15 +93,15 @@ impl Typer {
         };
         if on_wayland && tool_path("xdotool").is_some() {
             info!(
-                "Wayland session detected — skipping xdotool (it no-ops on Wayland-native windows)"
+                "Wayland session detected - skipping xdotool (it no-ops on Wayland-native windows)"
             );
         }
 
-        // Atomic clipboard paste — the preferred Wayland path. `wl-copy`
+        // Atomic clipboard paste - the preferred Wayland path. `wl-copy`
         // publishes the whole transcript, then a single uinput Ctrl+V
         // pastes it. Because the text lands in ONE paste rather than
         // key-by-key, the compositor cannot drop characters (cosmic-comp
-        // drops fast per-key events from wtype and uinput alike — observed
+        // drops fast per-key events from wtype and uinput alike - observed
         // as missing spaces mid-transcript). The prior clipboard is saved
         // and restored. Needs both wl-copy + wl-paste.
         let (wl_copy, wl_paste) = if on_wayland {
@@ -159,7 +159,7 @@ impl Typer {
         }
         sleep(PRE_TYPE_SLEEP);
 
-        // Atomic clipboard paste — preferred on Wayland; can't drop chars.
+        // Atomic clipboard paste - preferred on Wayland; can't drop chars.
         if self.wl_copy.is_some() && self.wl_paste.is_some() {
             match self.type_via_wl_paste(text) {
                 Ok(()) => return Ok(()),
@@ -412,7 +412,7 @@ fn bundled_tool(appdir: Option<std::ffi::OsString>, name: &str) -> Option<String
 
 fn ascii_char_to_key(c: char) -> Option<(KeyCode, bool)> {
     // Linux scancodes for letters follow the physical QWERTY layout, not
-    // the alphabet — so e.g. KEY_B=48 and KEY_E=18, not KEY_A+1 / KEY_A+4.
+    // the alphabet - so e.g. KEY_B=48 and KEY_E=18, not KEY_A+1 / KEY_A+4.
     // Map each letter explicitly. Anything assuming alphabetic ordering
     // produces garbage like 'h' → KEY_GRAVE.
     fn letter_key(lower: char) -> KeyCode {

@@ -1,11 +1,22 @@
-# cargo-deny — license + advisory + bans audit.
+# cargo-deny - license + advisory + bans audit.
 
 [graph]
 all-features = false
 
 [advisories]
 yanked = "deny"
-ignore = []
+ignore = [
+    # quick-xml < 0.41 (quadratic attribute check, unbounded namespace
+    # allocation): only reached through wayland-scanner, a proc-macro that
+    # parses the Wayland protocol XML shipped inside the wayland crates at
+    # compile time. No untrusted XML is ever parsed at run time, and no
+    # semver-compatible wayland-scanner with quick-xml 0.41 exists yet.
+    { id = "RUSTSEC-2026-0194", reason = "build-time only: wayland-scanner parses bundled protocol XML" },
+    { id = "RUSTSEC-2026-0195", reason = "build-time only: wayland-scanner parses bundled protocol XML" },
+    # ttf-parser is unmaintained with no successor yet; epaint (egui) uses
+    # it to read the fonts compiled into the binary, never user files.
+    { id = "RUSTSEC-2026-0192", reason = "egui reads only its bundled fonts; no replacement available" },
+]
 
 [licenses]
 allow = [

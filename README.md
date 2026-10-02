@@ -4,11 +4,10 @@
 
 # F9 Talk
 
-[![Rust](https://img.shields.io/badge/Rust-1.85%2B-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org/) [![Platform](https://img.shields.io/badge/Platform-Linux%20(Wayland%20%2B%20X11)-FCC624?logo=linux&logoColor=black)](https://www.linux.org/) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.85%2B-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org/) [![Platform](https://img.shields.io/badge/Platform-Linux%20(Wayland%20%2B%20X11)-FCC624?logo=linux&logoColor=black)](https://kernel.org/) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Hold-to-talk dictation for Linux.
-Hold **F9**, speak, release: your words are typed into whatever app has the cursor.
-Any text field, any app, on Wayland or X11.
+Hold **F9**, speak, release: your words are typed into the app you are working in, in browsers, editors, chat apps and terminals.
 
 - **Accurate and fast.** Streams to AssemblyAI Universal-3.6 Pro Realtime (the default) or Deepgram Nova-3. The text lands about 0.2 to 0.4 s after you release F9, and a sentence is never cut off at the end.
 - **Your words, spelled right.** A key-terms list for names, products and jargon (GitHub, Kubernetes, `.env`, your colleagues' names).
@@ -23,7 +22,7 @@ Both services give free credit to start, so you can try it without paying:
 
 | Service | Free to start | Get a key |
 |---|---|---|
-| AssemblyAI Universal-3.6 Pro (default) | Free credit on sign-up | [assemblyai.com](https://www.assemblyai.com/dashboard/signup) |
+| AssemblyAI Universal-3.6 Pro (default) | $50 of free credit, no card needed (about 110 hours of streaming) | [assemblyai.com](https://www.assemblyai.com/dashboard/signup) |
 | Deepgram Nova-3 | $200 of free credit | [deepgram.com](https://console.deepgram.com/signup) |
 
 On first run the Settings window opens by itself: paste your key, press **Test key**, then **Save**.
@@ -33,7 +32,21 @@ On first run the Settings window opens by itself: paste your key, press **Test k
 </p>
 
 AssemblyAI bills streaming by how long the connection is open (about $0.45 an hour), so F9 Talk closes it 60 s after your last dictation and reopens it on the next press, without losing a word.
-Check each service's pricing page for current rates.
+Prices and free credit are the services' own and can change: check [AssemblyAI pricing](https://www.assemblyai.com/pricing) and [Deepgram pricing](https://deepgram.com/pricing).
+
+## Supported systems
+
+- **Used every day and tested on Pop!_OS 24.04 with the COSMIC desktop (Wayland).**
+- **Other Wayland desktops** (KDE Plasma, Sway, Hyprland, GNOME): supported in the code, not tested yet.
+  The F9 key is read from the keyboard device and text is pasted through a virtual keyboard, both below the desktop, so these parts do not depend on it.
+  The red dot needs the `wlr-layer-shell` protocol, which KDE Plasma, Sway and Hyprland have and GNOME does not: on GNOME there is no dot, dictation still works, and Settings opens from the apps menu.
+- **X11:** supported in the code, less tested. The voice wave is a small always-on-top window that does not take clicks (use the apps menu for Settings).
+  Text is typed with `xdotool` when it is installed (`sudo apt install xdotool`), otherwise pasted through the clipboard.
+- **Requirements:** a 64-bit x86 PC, a microphone, an internet connection, and glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 or later).
+  The AppImage also needs FUSE (`fusermount`, from the `fuse3` package that most desktops already have); without it, run it with `--appimage-extract-and-run`.
+
+On Wayland the text is pasted with **Ctrl+Shift+V**, which terminals, browsers and most editors treat as paste; your previous clipboard text is put back afterwards.
+An app that uses Ctrl+Shift+V for something else will not receive the text.
 
 ## Install
 
@@ -59,8 +72,7 @@ sudo ./f9-talk.AppImage install --system  # udev rule + adds you to the `input` 
 
 Then **hold F9, speak, release**.
 
-The only host requirement is **`libfuse2`** (every AppImage needs it): `sudo apt install libfuse2` if it is missing.
-`f9-talk uninstall [--user|--system]` reverses step 2; your keys and settings are kept.
+`./f9-talk.AppImage uninstall [--user|--system]` reverses step 2; your keys and settings are kept.
 
 ### Build from source
 
@@ -80,6 +92,7 @@ While you hold F9 it turns into a red **voice wave** that follows your voice, th
 
 - **Settings:** right-click the dot, or choose *F9 Talk > Settings* in the apps menu (launching F9 Talk again while it runs also opens Settings).
 - **Quit:** hover the dot (it turns into a red **x**) and left-click it. Start it again from the apps menu, or log in again.
+  On X11 (no clickable dot), quit with `pkill -f f9-talk`.
 
 ## Settings
 
@@ -106,6 +119,8 @@ The Settings window covers everything:
 
 ## Command line
 
+With the AppImage, `f9-talk` below means `~/Applications/f9-talk.AppImage`.
+
 | Command | Result |
 |---|---|
 | `f9-talk` | Run it: hold F9 to dictate |
@@ -121,6 +136,7 @@ To make a flag permanent, edit `Exec=` in `~/.config/autostart/f9-talk.desktop`.
 
 Audio leaves your computer only while F9 is held: it is streamed over TLS to the service you chose and never written to disk.
 Keys are never logged.
+Each dictation's text is logged to your own user journal (`journalctl --user -t f9-talk`), which stays on your computer.
 See [SECURITY.md](SECURITY.md).
 
 ## Build, architecture, troubleshooting

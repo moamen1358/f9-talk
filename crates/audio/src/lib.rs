@@ -3,10 +3,10 @@
 //! - cpal opens the system default input device at its **native** sample
 //!   rate / format (most consumer hardware: 44.1 / 48 kHz F32, 1 or 2 ch).
 //! - Each callback we down-mix to mono, linearly resample to 16 kHz, and
-//!   convert to int16 — the format every STT backend in the repo expects.
+//!   convert to int16 - the format every STT backend in the repo expects.
 //! - 25 ms frames (800 bytes) pushed into a bounded `mpsc::channel(64)`
 //!   (≈1.6 s headroom). On overflow the audio thread drops oldest with a
-//!   counted warn-log — it must never block.
+//!   counted warn-log - it must never block.
 //! - On stream error (device disappear, callback panic, EOF) the spawner
 //!   relaunches with exponential backoff (1 s → 30 s cap).
 
