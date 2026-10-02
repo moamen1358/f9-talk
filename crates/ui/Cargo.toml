@@ -22,5 +22,5 @@ anyhow = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { workspace = true }
 eframe = { workspace = true, features = ["x11"] }
-smithay-client-toolkit = "0.20"
+smithay-client-toolkit = "0.21"
 wayland-client = "0.31"
