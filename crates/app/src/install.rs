@@ -9,6 +9,7 @@
 //!   --user   → ~/.local/share/applications/f9-talk.desktop
 //!              ~/.config/autostart/f9-talk.desktop
 //!              ~/.config/F9_talk/secrets.env  (chmod 0600, seeded only if missing)
+//!              ~/.config/F9_talk/config.toml + keyterms.txt (seeded only if missing)
 //!   --system → /etc/udev/rules.d/99-f9-talk.rules  (needs root)
 //!              usermod -aG input <invoking-user>
 //!              udevadm control --reload-rules && udevadm trigger /dev/uinput
@@ -98,11 +99,22 @@ fn install_user() -> Result<()> {
             .with_context(|| format!("write {secrets_path:?}"))?;
         fs::set_permissions(&secrets_path, fs::Permissions::from_mode(0o600))?;
         println!(
-            "  ✓ seeded {} (chmod 600 — paste your Deepgram key)",
+            "  ✓ seeded {} (chmod 600, paste your AssemblyAI key)",
             secrets_path.display()
         );
     } else {
         println!("  · kept {} (already exists)", secrets_path.display());
+    }
+
+    let created = crate::config::seed_user_files(&secrets_dir)
+        .with_context(|| format!("seed settings in {secrets_dir:?}"))?;
+    for name in [crate::config::CONFIG_FILE, crate::config::KEYTERMS_FILE] {
+        let path = secrets_dir.join(name);
+        if created.contains(&path) {
+            println!("  ✓ wrote {}", path.display());
+        } else {
+            println!("  · kept {} (already exists)", path.display());
+        }
     }
 
     // Best-effort: refresh the freedesktop apps DB so the entry appears
@@ -334,10 +346,15 @@ fn autostart_desktop(exec: &str) -> String {
     )
 }
 
-const SECRETS_STUB: &str = "# f9-talk secrets — loaded at startup.
-# Get a key at https://console.deepgram.com/  (free tier available).
-# Paste the value, save, then run `f9-talk` (or log in if autostart is enabled).
+const SECRETS_STUB: &str = "# f9-talk secrets, loaded at startup.
+# AssemblyAI is the default speech-to-text service: get a key at
+# https://www.assemblyai.com/dashboard (free credit on sign-up).
+# Deepgram is the alternative (backend = \"deepgram\" in config.toml):
+# https://console.deepgram.com/
+# Replace the placeholder, save, then run `f9-talk` (or log in again if
+# autostart is enabled). Placeholders starting PASTE_ are ignored.
 
+ASSEMBLYAI_API_KEY=PASTE_YOUR_ASSEMBLYAI_KEY_HERE
 DEEPGRAM_API_KEY=PASTE_YOUR_DEEPGRAM_KEY_HERE
 ";
 

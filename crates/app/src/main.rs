@@ -1,13 +1,14 @@
 //! `f9-talk` binary entry point.
 //!
-//! Hold F9, speak, release — the Deepgram Nova-3 transcript is typed at
-//! the cursor. That's the whole tool.
+//! Hold F9, speak, release: the transcript is typed at the cursor. That's
+//! the whole tool. Speech-to-text is AssemblyAI Universal-3.6 Pro Realtime
+//! by default, Deepgram Nova-3 by one line in `config.toml`.
 //!
 //! Threading:
 //! - **Main thread**: drives the indicator — a Wayland `wlr-layer-shell`
 //!   overlay (on its own thread) plus a Ctrl-C wait, or the eframe window
 //!   on X11 / macOS / Windows.
-//! - **Tokio runtime**: Deepgram WS client, hotkey listener, mic frame
+//! - **Tokio runtime**: STT WebSocket client, hotkey listener, mic frame
 //!   router, session loop, wake-from-suspend watcher.
 //! - **cpal callback thread**: real-time, owned by cpal; pushes 25 ms
 //!   frames + RMS into the shared `IndicatorState`.
@@ -20,7 +21,10 @@ use std::time::{Duration, Instant};
 use clap::Parser;
 use f9_talk_input::{typer_preflight, HotkeyEvent, Typer};
 
+mod config;
 mod install;
+mod simulate;
+use config::{Backend, Settings};
 use f9_talk_stt::{BackendEvent, Stt};
 use f9_talk_ui::{IndicatorApp, IndicatorState};
 use tokio::sync::mpsc;
@@ -31,11 +35,15 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// The hotkey is fixed: hold F9 to dictate.
 const HOTKEY: &str = "f9";
 
+/// After the indicator hides on release, give the compositor this long to
+/// hand keyboard focus back to the user's app before anything is typed.
+const FOCUS_SETTLE: Duration = Duration::from_millis(100);
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "f9-talk",
     version,
-    about = "Hold F9 to dictate (Deepgram Nova-3)"
+    about = "Hold F9 to dictate (AssemblyAI Universal-3.6 Pro or Deepgram Nova-3)"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -56,6 +64,10 @@ enum Subcommand {
     Install(install::InstallArgs),
     /// Remove what `install` set up (keeps your secrets.env in place).
     Uninstall(install::InstallArgs),
+    /// Stream a 16 kHz mono WAV through the configured backend at real-time
+    /// pace, as if F9 were held for its length, and print what would be typed.
+    #[command(hide = true)]
+    Simulate(simulate::SimulateArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -72,6 +84,7 @@ fn main() -> anyhow::Result<()> {
     match cli.command.as_ref() {
         Some(Subcommand::Install(args)) => return install::run(args),
         Some(Subcommand::Uninstall(args)) => return install::uninstall(args),
+        Some(Subcommand::Simulate(args)) => return simulate::run(args),
         None => {}
     }
 
@@ -269,11 +282,15 @@ fn acquire_instance_lock() -> anyhow::Result<Box<dyn std::any::Any>> {
     Ok(Box::new(f))
 }
 
-fn load_secrets() -> HashMap<String, String> {
+/// API keys from the environment, then `secrets.env` (first occurrence
+/// wins). The installer's `PASTE_...` placeholders count as no key.
+pub(crate) fn load_secrets() -> HashMap<String, String> {
     let mut out = HashMap::new();
-    if let Ok(v) = std::env::var("DEEPGRAM_API_KEY") {
-        if !v.is_empty() {
-            out.insert("DEEPGRAM_API_KEY".to_string(), v);
+    for var in ["ASSEMBLYAI_API_KEY", "DEEPGRAM_API_KEY"] {
+        if let Ok(v) = std::env::var(var) {
+            if is_real_key(&v) {
+                out.insert(var.to_string(), v);
+            }
         }
     }
     if let Some(path) = secrets_path() {
@@ -286,7 +303,9 @@ fn load_secrets() -> HashMap<String, String> {
                 if let Some((k, v)) = line.split_once('=') {
                     let k = k.trim().to_string();
                     let v = v.trim().trim_matches('"').trim_matches('\'').to_string();
-                    out.entry(k).or_insert(v);
+                    if is_real_key(&v) {
+                        out.entry(k).or_insert(v);
+                    }
                 }
             }
         }
@@ -299,12 +318,87 @@ fn secrets_path() -> Option<PathBuf> {
     Some(config.join("F9_talk").join("secrets.env"))
 }
 
-async fn build_cloud_backend(secrets: &HashMap<String, String>) -> anyhow::Result<Arc<dyn Stt>> {
-    let key = secrets.get("DEEPGRAM_API_KEY").cloned().unwrap_or_default();
-    Ok(Arc::new(f9_talk_stt::deepgram::Deepgram::new(
-        key,
-        f9_talk_stt::deepgram::Config::default(),
-    )))
+/// The text that gets typed. AssemblyAI's formatter writes em dashes
+/// ("the dress of the\u{2014} after"), which dictated plain text rarely
+/// wants, so each em or en dash becomes a plain hyphen: " - " between
+/// words, "-" inside a number range ("10\u{2013}12" becomes "10-12").
+pub(crate) fn tidy_transcript(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    for (i, &c) in chars.iter().enumerate() {
+        if c != '\u{2014}' && c != '\u{2013}' {
+            out.push(c);
+            continue;
+        }
+        let prev = out.chars().last();
+        let next = chars.get(i + 1).copied();
+        if prev.is_some_and(|p| p.is_ascii_digit()) && next.is_some_and(|n| n.is_ascii_digit()) {
+            out.push('-');
+            continue;
+        }
+        while out.ends_with(' ') {
+            out.pop();
+        }
+        if out.is_empty() {
+            continue;
+        }
+        out.push_str(" -");
+        if next.is_some_and(|n| n != ' ') {
+            out.push(' ');
+        }
+    }
+    out.trim().to_string()
+}
+
+fn is_real_key(v: &str) -> bool {
+    !v.is_empty() && !v.starts_with("PASTE_")
+}
+
+/// Build the backend `settings` asks for. When its key is missing but the
+/// other backend's key is there, use the other one (and say so) rather
+/// than not dictating at all.
+pub(crate) fn build_backend(
+    settings: &Settings,
+    secrets: &HashMap<String, String>,
+    keyterms: Vec<String>,
+) -> anyhow::Result<(Arc<dyn Stt>, Backend)> {
+    let mut choice = settings.backend;
+    if !secrets.contains_key(choice.key_var()) {
+        let other = choice.other();
+        if secrets.contains_key(other.key_var()) {
+            warn!(
+                "config asks for {} but {} is not set; using {} instead",
+                choice.label(),
+                choice.key_var(),
+                other.label()
+            );
+            choice = other;
+        } else {
+            anyhow::bail!(
+                "needs {} set in the environment or in ~/.config/F9_talk/secrets.env",
+                choice.key_var()
+            );
+        }
+    }
+    let key = secrets[choice.key_var()].clone();
+    let backend: Arc<dyn Stt> = match choice {
+        Backend::AssemblyAi => Arc::new(f9_talk_stt::assemblyai::AssemblyAi::new(
+            key,
+            f9_talk_stt::assemblyai::Config {
+                keyterms,
+                warm_secs: settings.assemblyai_warm_seconds,
+                ..Default::default()
+            },
+        )),
+        Backend::Deepgram => Arc::new(f9_talk_stt::deepgram::Deepgram::new(
+            key,
+            f9_talk_stt::deepgram::Config {
+                keyterms,
+                ..Default::default()
+            },
+        )),
+    };
+    Ok((backend, choice))
 }
 
 async fn run_session_loop(
@@ -312,21 +406,40 @@ async fn run_session_loop(
     mut frame_rx: mpsc::Receiver<f9_talk_audio::Frame>,
     indicator: Arc<IndicatorState>,
 ) -> anyhow::Result<()> {
-    if !secrets.contains_key("DEEPGRAM_API_KEY") {
-        eprintln!(
-            "f9-talk: needs DEEPGRAM_API_KEY set in the environment or in \
-             ~/.config/F9_talk/secrets.env"
-        );
-        std::process::exit(2);
+    let dir = config::config_dir();
+    if let Some(dir) = dir.as_deref() {
+        match config::seed_user_files(dir) {
+            Ok(created) => {
+                for path in created {
+                    info!("wrote default {}", path.display());
+                }
+            }
+            Err(e) => warn!(
+                "could not write default settings into {}: {e}",
+                dir.display()
+            ),
+        }
     }
-
-    let backend = build_cloud_backend(&secrets).await?;
+    let settings = config::load_settings(dir.as_deref());
+    let keyterms = config::load_keyterms(dir.as_deref());
+    let (backend, choice) = match build_backend(&settings, &secrets, keyterms.clone()) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("f9-talk: {e}");
+            std::process::exit(2);
+        }
+    };
     let (event_tx, mut event_rx) = mpsc::channel::<BackendEvent>(64);
     backend
         .start(event_tx)
         .await
-        .map_err(|e| anyhow::anyhow!("could not start Deepgram backend: {e}"))?;
-    info!("Deepgram backend ready");
+        .map_err(|e| anyhow::anyhow!("could not start the {} backend: {e}", choice.label()))?;
+    info!(
+        "{} backend ready ({} key terms, finalize safety net {:?})",
+        choice.label(),
+        keyterms.len(),
+        settings.finalize_timeout()
+    );
 
     let mut hotkey_rx = match f9_talk_input::spawn_hotkey(HOTKEY) {
         Ok(rx) => rx,
@@ -364,28 +477,42 @@ async fn run_session_loop(
                         });
                     }
                     Some(HotkeyEvent::Released) => {
-                        let Some(sess) = session.take() else { continue; };
+                        let Some(mut sess) = session.take() else { continue; };
                         let release_at = Instant::now();
+                        // Frames captured before the key-up can still be
+                        // queued in the mic channel (select! may pick the
+                        // hotkey branch first): forward them, or the tail
+                        // of the last word is cut.
+                        while let Ok(f) = frame_rx.try_recv() {
+                            sess.frames_sent += 1;
+                            backend.send_audio(&f.bytes).await;
+                        }
                         // Hide the indicator first so the compositor returns
                         // keyboard focus to the user's app before the typer's
-                        // keys (or paste) land.
+                        // keys (or paste) land. The finalize request goes out
+                        // at once; the focus hand-back overlaps the wait.
                         indicator.set_recording(false);
                         indicator.set_status_text(None);
-                        std::thread::sleep(Duration::from_millis(100));
-                        let result = backend.end_session(Duration::from_millis(350)).await;
+                        let result = backend.end_session(settings.finalize_timeout()).await;
                         let final_at = Instant::now();
+                        let settled = release_at.elapsed();
+                        if settled < FOCUS_SETTLE {
+                            tokio::time::sleep(FOCUS_SETTLE - settled).await;
+                        }
                         info!(
                             target: "f9_talk::press",
-                            "press_to_release={:.0?} frames={} first_byte_sent={:?} release_to_final={:.0?} transcript={:?}",
+                            "backend={} press_to_release={:.0?} frames={} first_byte_sent={:?} release_to_final={:.0?} transcript={:?}",
+                            backend.name(),
                             release_at.duration_since(sess.press_at),
                             sess.frames_sent,
                             sess.first_byte_sent.map(|t| t.duration_since(sess.press_at)),
                             final_at.duration_since(release_at),
                             result.transcript,
                         );
-                        if result.transcript.is_empty() {
+                        let text = tidy_transcript(&result.transcript);
+                        if text.is_empty() {
                             info!("(no speech detected)");
-                        } else if let Err(e) = typer.type_text(&result.transcript) {
+                        } else if let Err(e) = typer.type_text(&text) {
                             warn!("typer failed: {e}");
                         }
                     }
@@ -456,3 +583,26 @@ fn spawn_wakeup_watcher() {
 
 #[cfg(target_os = "linux")]
 extern crate libc;
+
+#[cfg(test)]
+mod tests {
+    use super::tidy_transcript;
+
+    #[test]
+    fn em_and_en_dashes_become_hyphens() {
+        assert_eq!(
+            tidy_transcript("the dress of the\u{2014} after his opening"),
+            "the dress of the - after his opening"
+        );
+        assert_eq!(tidy_transcript("a \u{2014} b"), "a - b");
+        assert_eq!(tidy_transcript("a\u{2014}b"), "a - b");
+        assert_eq!(tidy_transcript("pages 10\u{2013}12"), "pages 10-12");
+        assert_eq!(tidy_transcript("wait \u{2013} no"), "wait - no");
+        assert_eq!(tidy_transcript("\u{2014}Hello"), "Hello");
+        assert_eq!(
+            tidy_transcript("Plain text, untouched."),
+            "Plain text, untouched."
+        );
+        assert_eq!(tidy_transcript(""), "");
+    }
+}

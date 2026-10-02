@@ -28,6 +28,9 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
@@ -43,7 +46,8 @@ maintainer = "Moamen Ghareeb <moamen.ghareeb.11@gmail.com>"
 copyright = "2026, Moamen Ghareeb <moamen.ghareeb.11@gmail.com>"
 license-file = ["../../LICENSE", "0"]
 extended-description = """Hold F9 to dictate; text appears at your cursor.
-Cloud STT via Deepgram Nova-3 streaming. Audio-reactive overlay
+Cloud STT via AssemblyAI Universal-3.6 Pro or Deepgram Nova-3
+streaming. Audio-reactive overlay
 indicator (a native wlr-layer-shell wave on Wayland). Linux X11 +
 Wayland."""
 section = "utils"

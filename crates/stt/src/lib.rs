@@ -1,19 +1,27 @@
-//! STT backend trait + Deepgram Nova-3 streaming impl.
+//! STT backend trait + two streaming implementations:
+//! [`assemblyai::AssemblyAi`] (Universal-3.6 Pro Realtime, the default)
+//! and [`deepgram::Deepgram`] (Nova-3, the fallback).
 //!
-//! [`deepgram::Deepgram`] implements the async [`Stt`] trait with a
-//! press/release-driven session model:
+//! Both implement the async [`Stt`] trait with a press/release-driven
+//! session model:
 //!
 //! ```text
-//!   start() ───► persistent WS open
+//!   start() ───► connection task + first session open
 //!   begin_session()
 //!     send_audio(frame) × N            (40 frames/sec × press duration)
-//!   end_session(timeout)  ─► Final transcript
+//!   end_session(timeout)  ─► Final transcript (waits for the server's
+//!                            reply to its finalize request; `timeout`
+//!                            is only a safety net)
 //!   stop()  (on app shutdown)
 //! ```
 
 #![forbid(unsafe_code)]
 
+pub mod assemblyai;
 pub mod deepgram;
+
+#[cfg(test)]
+mod test_support;
 
 use std::time::Duration;
 
@@ -61,11 +69,11 @@ pub enum SttError {
 /// keepalive logic belongs inside the implementation.
 #[async_trait]
 pub trait Stt: Send + Sync {
-    /// Static label for log lines (e.g. `"deepgram"`).
+    /// Static label for log lines (e.g. `"assemblyai"`).
     fn name(&self) -> &'static str;
 
-    /// Open the persistent WebSocket / load the model. Called once at
-    /// app start.
+    /// Spawn the connection task and open the first session. Called
+    /// once at app start.
     async fn start(&self, events: mpsc::Sender<BackendEvent>) -> Result<(), SttError>;
 
     /// Reset per-session state. Called on F9 press.
@@ -75,17 +83,16 @@ pub trait Stt: Send + Sync {
     /// `BackendEvent::Error`) to keep the audio thread fast.
     async fn send_audio(&self, pcm: &[u8]);
 
-    /// Wait up to `timeout` for any straggler finals, then return the
-    /// concatenated transcript. Called on F9 release.
+    /// Ask the server to finalize the press and wait for its final text
+    /// (never a partial hypothesis). `timeout` is a safety net for a
+    /// reply that never comes; then the best text so far is returned.
+    /// Called on F9 release.
     async fn end_session(&self, timeout: Duration) -> SessionResult;
 
     /// Tear down the connection / unload the model. Called on app stop.
     async fn stop(&self);
 }
 
-/// The cloud backend requires 16 kHz mono s16le PCM. The cpal streamer
-/// gives us the device's native sample rate (often 44.1 / 48 kHz). We
-/// declare 16 kHz to Deepgram via the `sample_rate` query param and let
-/// the server resample. M2 will do client-side resampling once we add a
-/// deterministic resampler crate.
+/// Both cloud backends get 16 kHz mono s16le PCM: the audio crate
+/// down-mixes and resamples the device's native stream to that.
 pub const STT_SAMPLE_RATE: u32 = 16_000;

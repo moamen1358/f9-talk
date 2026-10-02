@@ -38,7 +38,7 @@ crates/
 ├── core/       FRAME_BYTES, SAMPLE_RATE_HZ, FRAME_CHANNEL_CAPACITY constants
 ├── input/      hotkey-listener wrapper (F9 + 50 ms debounce) + typer
 ├── audio/      cpal mic streamer with linear resampler + auto-restart
-├── stt/        Stt trait + Deepgram Nova-3 streaming client
+├── stt/        Stt trait + AssemblyAI and Deepgram streaming clients
 ├── ui/         eframe IndicatorApp (X11) + wlr-layer-shell overlay (Wayland)
 └── app/        clap CLI + abstract-socket lock + session loop + glue
 ```

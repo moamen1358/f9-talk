@@ -28,8 +28,8 @@ if [[ -n "$TARGET_USER" ]] && ! id -nG "$TARGET_USER" | grep -qw input; then
 fi
 
 # 4. Seed ~/.config/F9_talk/secrets.env for the installing user if it
-#    doesn't exist yet. The file is the only place the Deepgram key
-#    can live for the cloud backend, so a placeholder here saves new
+#    doesn't exist yet. The file is the only place the API keys
+#    can live for the cloud backends, so a placeholder here saves new
 #    users a trip to the README. chmod 600 + chown back to the user.
 if [[ -n "$TARGET_USER" ]]; then
     TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
@@ -39,15 +39,20 @@ if [[ -n "$TARGET_USER" ]]; then
         if [[ ! -e "$SECRETS_FILE" ]]; then
             install -d -m 700 -o "$TARGET_USER" -g "$TARGET_USER" "$SECRETS_DIR" || true
             cat >"$SECRETS_FILE" <<'EOF'
-# f9-talk secrets — loaded at startup.
-# Get a key at https://console.deepgram.com/  (free tier available).
-# Paste the value, save, then run `f9-talk` (or log in if autostart is enabled).
+# f9-talk secrets, loaded at startup.
+# AssemblyAI is the default speech-to-text service: get a key at
+# https://www.assemblyai.com/dashboard (free credit on sign-up).
+# Deepgram is the alternative (backend = "deepgram" in config.toml):
+# https://console.deepgram.com/
+# Replace the placeholder, save, then run `f9-talk` (or log in again if
+# autostart is enabled). Placeholders starting PASTE_ are ignored.
 
+ASSEMBLYAI_API_KEY=PASTE_YOUR_ASSEMBLYAI_KEY_HERE
 DEEPGRAM_API_KEY=PASTE_YOUR_DEEPGRAM_KEY_HERE
 EOF
             chown "$TARGET_USER:$TARGET_USER" "$SECRETS_FILE" || true
             chmod 600 "$SECRETS_FILE" || true
-            echo "f9-talk: seeded $SECRETS_FILE — paste your Deepgram key there."
+            echo "f9-talk: seeded $SECRETS_FILE — paste your AssemblyAI key there."
         fi
     fi
 fi

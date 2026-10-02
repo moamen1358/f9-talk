@@ -17,11 +17,12 @@ X11 → eframe wave window         ├─ session loop ────────�
                                  │   - Ctrl-C             │
                                  └────────┬───────────────┘
                                           │
-                                 ┌── STT WS client ───┐
-                                 │   tokio-tungstenite│
-                                 │   Deepgram Nova-3  │ ◄── frame_rx → send_audio()
-                                 │   end_session()→fin │
-                                 └────────────────────┘
+                                 ┌── STT WS client ─────────┐
+                                 │   tokio-tungstenite      │
+                                 │   AssemblyAI U-3.6 Pro   │ ◄── frame_rx → send_audio()
+                                 │   (or Deepgram Nova-3)   │
+                                 │   end_session() → final  │
+                                 └──────────────────────────┘
 ```
 
 ## Workspace layout
@@ -33,14 +34,92 @@ The workspace under `crates/` is organized as:
 | `f9-talk-core` | Shared constants (frame size, sample rate, channel capacity) |
 | `f9-talk-input` | Hotkey-listener (F9) with 50 ms auto-repeat debounce; typer dispatcher (wl-copy paste, wtype, xdotool, uinput) |
 | `f9-talk-audio` | cpal mic streamer with linear resampler and RMS extraction for the wave indicator |
-| `f9-talk-stt` | `Stt` trait + Deepgram Nova-3 streaming WebSocket client |
+| `f9-talk-stt` | `Stt` trait + AssemblyAI Universal-3.6 Pro (default) and Deepgram Nova-3 streaming WebSocket clients |
 | `f9-talk-ui` | eframe wave indicator (X11) + native `wlr-layer-shell` overlay (Wayland) + X11 positioner |
-| `f9-talk` (binary) | clap CLI, secrets loader, abstract-socket lock, session loop, glue |
+| `f9-talk` (binary) | clap CLI, settings (`config.toml`, `keyterms.txt`) and secrets loader, abstract-socket lock, session loop, glue |
+
+## Speech-to-text backends
+
+The backend is chosen by `backend` in `~/.config/F9_talk/config.toml`
+(`assemblyai` by default, `deepgram` as the fallback). Both send the
+key terms from `~/.config/F9_talk/keyterms.txt`: AssemblyAI as
+`keyterms_prompt`, Deepgram as repeated `keyterm` params (Nova-3 rejects
+the old `keywords` param with HTTP 400).
+
+### Release: wait for the final, never a fixed timeout
+
+Up to v0.7.1 the release path waited 350 ms for the first final and
+typed whatever had arrived. Deepgram (endpointing 25 ms) often sends a
+segment final first and the rest of the sentence later, so the end of
+the sentence was dropped; a large share of real presses hit the 350 ms
+limit.
+Now `end_session` asks the service to finalize and waits for its reply:
+
+- **Deepgram**: sends `Finalize`, waits for the result flagged
+  `from_finalize: true` (Deepgram sends it after every other final of
+  the press, empty for a silent press).
+  Known limit of this fallback: a pause of a second or so mid-sentence
+  still comes back as two punctuated pieces at every `endpointing` value
+  tried (25, 100, 300, false), and 100 or 300 make Nova-3 Title-Case
+  whole segments when key terms are sent, so it stays at 25 ms.
+- **AssemblyAI**: sends `ForceEndpoint`. While a turn is open (speech
+  heard, or a partial with no final) it waits for that turn's formatted
+  final. With no turn open it ends as soon as the reply to
+  `ForceEndpoint` lands, or 0.7 s after it when nothing comes (the server
+  answers nothing when no speech is pending).
+- `finalize_timeout_ms` (4 s) is only a safety net. If it passes, the
+  finals plus the open turn's latest partial are typed and a warning is
+  logged.
+
+Before finalizing, the session loop forwards any mic frames still queued
+in the channel, so the last 25-50 ms of the press reach the service.
+Measured on this machine (TTS clips through `f9-talk simulate`): release
+to text 195-360 ms with AssemblyAI on clear TTS clips and 245-390 ms on
+accented speech up to 59 s long, 210-380 ms with Deepgram.
+
+### AssemblyAI session lifecycle
+
+AssemblyAI bills streaming by how long the socket is open, idle time
+included, so the session is not held open forever:
+
+- A session opens at start-up, so the first press is warm.
+- It stays open `assemblyai_warm_seconds` (60 s) after the last press,
+  then closes with `Terminate`. The server is also told
+  `inactivity_timeout` = warm + 30 s as a billing safety net.
+- A press with no open session reconnects at once (socket ~0.3 s,
+  `Begin` ~0.9 s). The press's audio is kept from its first frame and
+  sent as soon as the socket opens, so no word is lost.
+- If the socket drops mid-press, the whole press's audio is replayed
+  into a new session.
+- Audio goes out in 50 ms frames (two 25 ms mic frames): the server
+  closes the socket (code 3007) on frames shorter than 50 ms, so the
+  last odd frame of a press is padded with silence.
+- `assemblyai_warm_seconds = 0` keeps one session open (with KeepAlive)
+  for as long as the app runs.
+- English is pinned (`language_codes=["en"]`).
+- `min_turn_silence` and `max_turn_silence` are set to the 10 s maximum.
+  With the server default (about 1.3 s) a pause to think mid-sentence
+  ended the turn and each piece came back punctuated on its own ("The
+  tokenizing model. Works correctly, ..."); now one press is one turn,
+  ended by `ForceEndpoint`, and comes back as one sentence.
+
+### Trying a clip without the mic
+
+`f9-talk simulate <clip.wav> [--backend assemblyai|deepgram] [--warm-ms N]`
+streams a 16 kHz mono WAV through the backend at real-time pace, the way
+the mic loop does while F9 is held, and prints the text that would be
+typed plus `release_to_text_ms` as one JSON line. The end-to-end tests
+use it:
+
+```bash
+cargo test -p f9-talk --test e2e_dictation -- --ignored --nocapture
+```
 
 ## Reliability mechanisms
 
-- WebSocket auto-reconnect on socket close and on three consecutive
-  send failures. Backoff resets after a healthy connection drops.
+- WebSocket auto-reconnect on socket close and on send failures.
+  Backoff resets after a healthy connection drops. AssemblyAI reconnects
+  only when a press needs it (see above).
 - Mic auto-restart on cpal stream errors with the same backoff.
 - Wake-from-suspend detection via 5 s polling that flags clock drift
   greater than 30 s and reconnects the STT client.

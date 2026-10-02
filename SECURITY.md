@@ -10,7 +10,7 @@
 
 f9-talk handles sensitive resources:
 
-- **Microphone audio** — captured locally via PulseAudio/PipeWire and streamed to Deepgram over TLS. Audio is never written to disk.
+- **Microphone audio** — captured locally via PulseAudio/PipeWire and streamed over TLS to the chosen speech-to-text service (AssemblyAI by default, or Deepgram). Audio is never written to disk.
 - **API keys** — stored in `~/.config/F9_talk/secrets.env` (mode `600`). Never logged or transmitted beyond the intended service.
 - **Keystroke injection** — text is injected via `xdotool` after transcription. No keystrokes are intercepted or logged beyond the hotkey trigger.
 
@@ -29,6 +29,6 @@ You will receive an acknowledgement within 48 hours. Fixes are prioritised and r
 
 ## Out of Scope
 
-- Vulnerabilities in third-party services (Deepgram, PulseAudio)
+- Vulnerabilities in third-party services (AssemblyAI, Deepgram, PulseAudio)
 - Issues requiring physical access to the machine
 - Social engineering

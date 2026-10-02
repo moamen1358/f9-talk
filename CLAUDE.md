@@ -1,6 +1,6 @@
 # f9-talk — project context for Claude
 
-Hold **F9**, speak, release → the Deepgram Nova-3 transcript types at the cursor. That's the whole tool. Linux only (Wayland/COSMIC is the primary target, X11 supported). Single statically-linked Rust binary, Cargo workspace.
+Hold **F9**, speak, release → the transcript (AssemblyAI Universal-3.6 Pro by default, Deepgram Nova-3 via `backend` in `~/.config/F9_talk/config.toml`) types at the cursor. That's the whole tool. Linux only (Wayland/COSMIC is the primary target, X11 supported). Single statically-linked Rust binary, Cargo workspace.
 
 ## Current state (2026-06-25)
 - **v0.7.1**, shipped. Repo `https://github.com/moamen1358/f9-talk`. Work happens on branch `feat/lean-deepgram-dictation`, fast-forwarded into `main` at each release.
@@ -20,7 +20,7 @@ Hold **F9**, speak, release → the Deepgram Nova-3 transcript types at the curs
 
 ## Gotchas (non-obvious)
 - **Codex image generation** (gpt-image-2, the `$imagegen` skill) only works headlessly with **full network**: `codex exec --sandbox danger-full-access` (absolute path `/home/moamen/.local/bin/codex`). With `workspace-write` the image tool silently fails and Codex fakes it (reuses `~/.codex/generated_images/` cache or draws with Cairo). Generate on flat green `#00FF00`, then despill via `~/.codex/skills/.system/imagegen/scripts/remove_chroma_key.py --auto-key border --soft-matte --despill`, run with `uv run --with pillow` (no system pip). Codex auth is ChatGPT-OAuth — no `OPENAI_API_KEY`, so the `image_gen.py` CLI fallback is unusable.
-- **Secrets**: `~/.config/F9_talk/secrets.env` holds `DEEPGRAM_API_KEY`. The installer seeds it with an *uncommented* placeholder and `load_secrets` takes the FIRST occurrence — set the key by **overwriting** the file (`>`), never appending (`>>`).
+- **Secrets**: `~/.config/F9_talk/secrets.env` holds `ASSEMBLYAI_API_KEY` and `DEEPGRAM_API_KEY`. `load_secrets` takes the FIRST occurrence of each key and ignores `PASTE_...` placeholders, so a placeholder no longer shadows a key appended below it; a second real value still does.
 - **Drives**: the live project is on the **`moamen`** drive (`/media/moamen/moamen/F9_talk`). An OLD copy lives on the **`inVisA11`** drive, usually unmounted — if an editor shows an empty `/media/moamen/inVisA11/F9_talk`, that's the stale one.
 - **Screenshots on COSMIC**: `grim` fails (no wlr-screencopy); use `cosmic-screenshot --interactive=false --save-dir <dir>`.
 - **Tessera** (`~/Desktop/Tessera`) is the user's other app; its brush-"T" logo (made with Adobe Firefly) is the quality bar referenced for f9-talk's logo.

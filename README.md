@@ -8,7 +8,8 @@
 
 Hold-to-talk dictation for Linux. Press **F9**, speak, release — the
 transcript types itself into whatever app you're focused on. Works
-system-wide, in any text field. Powered by Deepgram Nova-3 streaming.
+system-wide, in any text field. Powered by AssemblyAI Universal-3.6 Pro
+Realtime streaming, with Deepgram Nova-3 one config line away.
 
 A single statically-linked Rust binary. On Wayland the indicator is a
 native `wlr-layer-shell` voice wave; X11 is supported too.
@@ -33,10 +34,10 @@ sudo ./f9-talk.AppImage install --system  # udev rule + adds you to the `input` 
 
 # 3. Log out and back in once   ← so the `input`-group membership applies
 
-# 4. Put your Deepgram API key in the .env file (free tier:
-#    https://console.deepgram.com/signup). This overwrites the placeholder
+# 4. Put your AssemblyAI API key in the .env file (free credit on sign-up:
+#    https://www.assemblyai.com/dashboard). This overwrites the placeholders
 #    that step 2 created at ~/.config/F9_talk/secrets.env:
-echo 'DEEPGRAM_API_KEY=your_key_here' > ~/.config/F9_talk/secrets.env
+echo 'ASSEMBLYAI_API_KEY=your_key_here' > ~/.config/F9_talk/secrets.env
 
 # 5. Run it — or just log back in, it autostarts:
 ./f9-talk.AppImage
@@ -69,6 +70,34 @@ then settles back to the dot on release.
 **To quit:** hover the dot — it turns into a red **×** — and click it.
 The tool exits cleanly; relaunch it from the apps menu (or just log in
 again, it autostarts).
+
+## Settings
+
+Two plain-text files in `~/.config/F9_talk/`, written with commented
+defaults on first run. Quit f9-talk (click the dot) and start it again
+after editing either one.
+
+**`keyterms.txt`**: names and jargon to always get right, one per line
+(GitHub, Kubernetes, .env, em dash, your colleagues' names, ...). The default file boosts nothing. Up to 100 terms; both services use them.
+
+**`config.toml`**:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `backend` | `"assemblyai"` | `"assemblyai"` (Universal-3.6 Pro) or `"deepgram"` (Nova-3). Each needs its key in `secrets.env`: `ASSEMBLYAI_API_KEY` or `DEEPGRAM_API_KEY`. |
+| `assemblyai_warm_seconds` | `60` | AssemblyAI bills every second its connection is open, idle or not, so f9-talk closes it this long after your last dictation and reopens it on the next press. Your audio is kept while it reconnects, so no word is lost. `0` keeps it open all the time (about $0.45 per hour f9-talk runs). |
+| `finalize_timeout_ms` | `4000` | Safety net for the final text after release. It normally arrives in 0.1 to 0.4 s. |
+
+To go back to Deepgram, set one line in `config.toml`:
+
+```toml
+backend = "deepgram"
+```
+
+On release f9-talk asks the service to finalize and waits for the
+finished text of everything you said, so a sentence is never cut at the
+end. If the key for the chosen service is missing but the other one is
+set, f9-talk uses the other service and says so in its log.
 
 ## Options
 

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "F9 Talk: STT backend trait + Deepgram Nova-3 streaming impl."
+description = "F9 Talk: STT backend trait + AssemblyAI Universal-3.6 Pro and Deepgram Nova-3 streaming impls."
 
 [lib]
 path = "src/lib.rs"
