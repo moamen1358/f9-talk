@@ -52,7 +52,16 @@ pub fn run(args: &SettingsArgs) -> Result<()> {
     let viewport = egui::ViewportBuilder::default()
         .with_title("F9 Talk Settings")
         .with_app_id("f9-talk")
-        .with_inner_size([560.0, 720.0])
+        // Tall enough to fit everything for a `--screenshot` (it is cropped
+        // to the content); a normal window scrolls instead.
+        .with_inner_size([
+            560.0,
+            if args.screenshot.is_some() {
+                1000.0
+            } else {
+                720.0
+            },
+        ])
         .with_min_inner_size([480.0, 520.0]);
     let options = eframe::NativeOptions {
         viewport,
@@ -236,8 +245,7 @@ impl SettingsApp {
                     ui.label(RichText::new("Add an API key to start").strong());
                     ui.label(
                         "F9 Talk uses your own speech-to-text key. Both services give free \
-                         credit to start: $50 at AssemblyAI (about 110 hours of streaming) \
-                         and $200 at Deepgram.",
+                         credit when you sign up, so you can start without paying.",
                     );
                     ui.horizontal_wrapped(|ui| {
                         ui.hyperlink_to("Get a free AssemblyAI key", ASSEMBLYAI_SIGNUP);

@@ -18,11 +18,11 @@ Hold **F9**, speak, release: your words are typed into the app you are working i
 ## Bring your own key
 
 F9 Talk uses your own speech-to-text API key.
-Both services give free credit to start, so you can try it without paying:
+Both services give free credit when you sign up, so you can try it without paying (amounts as listed on their pricing pages in October 2026):
 
 | Service | Free to start | Get a key |
 |---|---|---|
-| AssemblyAI Universal-3.6 Pro (default) | $50 of free credit, no card needed (about 110 hours of streaming) | [assemblyai.com](https://www.assemblyai.com/dashboard/signup) |
+| AssemblyAI Universal-3.6 Pro (default) | $50 of free credit, no card needed | [assemblyai.com](https://www.assemblyai.com/dashboard/signup) |
 | Deepgram Nova-3 | $200 of free credit | [deepgram.com](https://console.deepgram.com/signup) |
 
 On first run the Settings window opens by itself: paste your key, press **Test key**, then **Save**.
