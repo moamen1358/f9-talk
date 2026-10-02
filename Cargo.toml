@@ -58,7 +58,7 @@ egui = "0.32"
 egui_extras = "0.32"
 
 # UI (Linux-only) - X11 positioner for the eframe indicator.
-x11rb = "0.13"
+x11rb = "0.14"
 
 [profile.release]
 lto = "thin"
