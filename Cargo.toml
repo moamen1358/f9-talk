@@ -45,7 +45,7 @@ url = "2"
 dirs = "6"
 
 # Audio + input
-cpal = "0.17"
+cpal = "0.18"
 hotkey-listener = "0.3"
 evdev = "0.13"
 crossbeam-channel = "0.5"
