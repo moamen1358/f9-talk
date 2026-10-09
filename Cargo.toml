@@ -38,7 +38,7 @@ toml = { version = "0.9", default-features = false, features = ["parse", "serde"
 clap = { version = "4", features = ["derive"] }
 
 # Networking: AssemblyAI / Deepgram streaming over WebSocket.
-tokio-tungstenite = { version = "0.27", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 url = "2"
 
 # Cross-platform paths
